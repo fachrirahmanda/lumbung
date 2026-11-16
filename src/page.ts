@@ -4,53 +4,63 @@ export const PAGE = `<!doctype html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="theme-color" content="#f5f0e6" />
+<meta name="theme-color" content="#faf7f2" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#2a1a12" media="(prefers-color-scheme: dark)" />
 <title>Lumbung</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23d9480f'/%3E%3Cpath d='M9 8h4v12h8v4H9z' fill='%23fffdf8'/%3E%3C/svg%3E" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232a1a12'/%3E%3Cpath d='M5%2015.5%2016%207l11%208.5-1.6%201.2L16%2010%206.6%2016.7z' fill='%23faf7f2'/%3E%3Crect x='8' y='16' width='16' height='9' rx='1' fill='%23faf7f2'/%3E%3Crect x='13.5' y='19' width='5' height='6' fill='%23ff5f1f'/%3E%3C/svg%3E" type="image/svg+xml" />
 <style>
-  :root { --bg: #f5f0e6; --surface: #fffdf8; --text: #2a1a12; --muted: #7a6a5e; --line: #e4dccd; --fill: #efe8da; --accent: #d9480f; --accent-soft: #fbe3d6; --danger: #b42318; --radius: 12px; }
-  @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --bg: #2a1a12; --surface: #35251c; --text: #f5f0e6; --muted: #b9a999; --line: #4a3628; --fill: #3f2d22; --accent-soft: #4d2e1f; } }
-  :root[data-theme=dark] { --bg: #2a1a12; --surface: #35251c; --text: #f5f0e6; --muted: #b9a999; --line: #4a3628; --fill: #3f2d22; --accent-soft: #4d2e1f; }
+  /* Basis design tokens, the same palette as Silpasala (ivory and espresso, signal orange accent). */
+  :root { color-scheme: light dark; --bg: #faf7f2; --surface: #fffdf9; --surface-2: #f3eee5; --text: #2a1a12; --muted: #6e5a4c; --line: rgb(42 26 18 / 0.1); --fill: rgb(42 26 18 / 0.05); --accent: #ff5f1f; --accent-ink: #a83a08; --accent-fill: #d14210; --accent-hover: #b93a0c; --accent-soft: rgb(255 95 31 / 0.12); --danger: #c62222; --radius: 8px; --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter Variable", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --bg: #2a1a12; --surface: #33221a; --surface-2: #35231a; --text: #faf7f2; --muted: #bfae9f; --line: rgb(250 247 242 / 0.1); --fill: rgb(250 247 242 / 0.07); --accent-ink: #ff8a5c; --accent-soft: rgb(255 95 31 / 0.18); --danger: #f87171; } }
+  :root[data-theme=dark] { --bg: #2a1a12; --surface: #33221a; --surface-2: #35231a; --text: #faf7f2; --muted: #bfae9f; --line: rgb(250 247 242 / 0.1); --fill: rgb(250 247 242 / 0.07); --accent-ink: #ff8a5c; --accent-soft: rgb(255 95 31 / 0.18); --danger: #f87171; }
   * { box-sizing: border-box; }
-  body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font: 14px/1.5 var(--font); }
   .muted { color: var(--muted); }
-  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 7px 14px; white-space: nowrap; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); color: var(--text); font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; }
+  .btn:hover { background: var(--fill); }
+  .btn.primary { background: var(--accent-fill); border-color: var(--accent-fill); color: #fff; }
+  .btn.primary:hover { background: var(--accent-hover); }
   .btn.danger { color: var(--danger); }
   .btn.small { padding: 4px 10px; font-size: 13px; }
+  .btn:focus-visible, .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .btn:disabled { opacity: 0.6; cursor: progress; }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; background: var(--fill); color: var(--muted); font-size: 12px; font-weight: 600; }
-  .badge.accent { background: var(--accent-soft); color: var(--accent); }
-  .banner { margin: 0 0 16px; border-radius: var(--radius); padding: 12px 16px; background: color-mix(in srgb, var(--danger) 12%, var(--surface)); color: var(--danger); white-space: pre-line; }
-  input, select { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 6px; background: var(--fill); color: var(--muted); font-size: 12px; font-weight: 600; }
+  .badge.accent { background: var(--accent-soft); color: var(--accent-ink); }
+  .banner { margin: 0 0 16px; border-radius: var(--radius); padding: 12px 16px; background: color-mix(in srgb, var(--danger) 10%, var(--surface)); color: var(--danger); white-space: pre-line; }
+  input, select { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 7px 10px; }
   input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
   /* Sign-in */
   .login { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
-  .login-card { width: min(400px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 32px 28px; text-align: center; box-shadow: 0 12px 40px rgba(42, 26, 18, 0.08); }
-  .login-logo { width: 48px; height: 48px; border-radius: 12px; background: var(--accent); display: grid; place-items: center; margin: 0 auto 16px; }
-  .login-card h1 { margin: 0 0 6px; font-size: 22px; }
-  .google { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; margin-top: 20px; padding: 11px 16px; border-radius: 10px; border: 1px solid var(--line); background: #fff; color: #1f1f1f; font: inherit; font-weight: 600; text-decoration: none; }
+  .login-card { width: min(400px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 32px 28px; text-align: center; box-shadow: 0 12px 40px rgb(42 26 18 / 0.08); }
+  .login-logo { width: 48px; height: 48px; display: grid; place-items: center; margin: 0 auto 16px; }
+  .login-logo svg, .brand-mark svg { width: 100%; height: 100%; display: block; }
+  .login-card h1 { margin: 0 0 6px; font-size: 22px; letter-spacing: -0.01em; }
+  .google { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; margin-top: 20px; padding: 10px 16px; border-radius: var(--radius); border: 1px solid var(--line); background: #fff; color: #1f1f1f; font: inherit; font-weight: 600; text-decoration: none; }
+  .google:hover { background: #f7f7f7; }
   .login-note { margin-top: 18px; font-size: 13px; color: var(--muted); }
 
   /* App */
-  header.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 24px; border-bottom: 1px solid var(--line); background: var(--surface); position: sticky; top: 0; z-index: 2; }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; }
-  .brand-mark { width: 28px; height: 28px; border-radius: 8px; background: var(--accent); }
-  .tabs { display: flex; gap: 4px; padding: 4px; background: var(--fill); border-radius: 999px; }
-  .tab { padding: 6px 14px; border: 0; border-radius: 999px; background: none; color: var(--muted); font: inherit; font-weight: 600; cursor: pointer; }
-  .tab[aria-selected=true] { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
-  .me { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+  header.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 24px; border-bottom: 1px solid var(--line); background: var(--surface); position: sticky; top: 0; z-index: 2; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; letter-spacing: -0.01em; }
+  .brand-mark { width: 28px; height: 28px; }
+  .tabs { display: flex; gap: 2px; padding: 3px; background: var(--fill); border-radius: var(--radius); }
+  .tab { padding: 5px 14px; border: 0; border-radius: 6px; background: none; color: var(--muted); font: inherit; font-weight: 600; cursor: pointer; }
+  .tab[aria-selected=true] { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgb(42 26 18 / 0.1); }
+  .me { display: flex; align-items: center; gap: 10px; font-size: 13px; }
   main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 64px; }
-  h2 { margin: 0 0 4px; font-size: 18px; }
-  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+  h2 { margin: 0 0 4px; font-size: 17px; letter-spacing: -0.01em; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
   .row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; justify-content: space-between; }
-  .drop { border: 2px dashed var(--line); border-radius: var(--radius); padding: 24px; text-align: center; color: var(--muted); cursor: pointer; display: block; }
-  .drop.over { border-color: var(--accent); color: var(--text); }
+  .drop { border: 1.5px dashed var(--line); border-radius: 12px; padding: 24px; text-align: center; color: var(--muted); cursor: pointer; display: block; }
+  .drop:hover, .drop.over { border-color: var(--accent); color: var(--text); background: var(--accent-soft); }
   input[type=file] { display: none; }
   table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
-  th { color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: 0.02em; background: var(--surface-2); }
+  td:first-child, th:first-child { padding-left: 16px; }
+  td:last-child, th:last-child { padding-right: 16px; }
+  tbody tr:hover td { background: var(--fill); }
   td.num, th.num { text-align: right; white-space: nowrap; }
   td.actions { text-align: right; white-space: nowrap; }
   td.actions .btn { margin-left: 6px; }
@@ -58,7 +68,7 @@ export const PAGE = `<!doctype html>
   .empty { padding: 36px 16px; text-align: center; color: var(--muted); }
   .form-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 16px; }
   .form-row input[type=email] { flex: 1 1 260px; }
-  @media (max-width: 720px) { th.hide-sm, td.hide-sm { display: none; } header.top { padding: 12px 16px; } }
+  @media (max-width: 720px) { th.hide-sm, td.hide-sm { display: none; } header.top { padding: 12px 16px; } .me { flex-wrap: wrap; } .me > span:first-child { word-break: break-all; } }
 </style>
 </head>
 <body>
@@ -76,6 +86,8 @@ export const PAGE = `<!doctype html>
     signin: "Sign in as the superadmin before connecting Google Drive.",
     drive: "Google Drive could not be connected. Please try again."
   };
+  // The brand mark: a rice barn (lumbung), on the same espresso tile as Silpasala's mark.
+  var MARK = '<svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#2a1a12"/><rect x=".5" y=".5" width="31" height="31" rx="7.5" fill="none" stroke="#fff" stroke-opacity=".14"/><path d="M5 15.5 16 7l11 8.5-1.6 1.2L16 10 6.6 16.7z" fill="#faf7f2"/><rect x="8" y="16" width="16" height="9" rx="1" fill="#faf7f2"/><rect x="13.5" y="19" width="5" height="6" fill="#ff5f1f"/></svg>';
   var RANK = { user: 1, admin: 2, superadmin: 3 };
   var ROLE_LABEL = { superadmin: "Superadmin", admin: "Admin", user: "User" };
   var GOOGLE_MARK = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.5-4.5 2.4-7.2 2.4-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
@@ -100,7 +112,7 @@ export const PAGE = `<!doctype html>
     var err = state.error ? '<div class="banner">' + esc(state.error) + "</div>" : "";
     app.innerHTML =
       '<div class="login"><div class="login-card">' +
-      '<div class="login-logo"><svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true"><path d="M9 8h4v12h8v4H9z" fill="#fffdf8"/></svg></div>' +
+      '<div class="login-logo">' + MARK + "</div>" +
       "<h1>Lumbung</h1><div class=\\"muted\\">Sign in with your Google account to continue.</div>" +
       '<div style="margin-top:18px;text-align:left;">' + err + "</div>" +
       '<a class="google" href="/auth/login">' + GOOGLE_MARK + "Continue with Google</a>" +
@@ -113,7 +125,7 @@ export const PAGE = `<!doctype html>
       '<button class="tab" role="tab" aria-selected="' + (state.tab === "files") + '" data-tab="files">Files</button>' +
       (can("admin") ? '<button class="tab" role="tab" aria-selected="' + (state.tab === "settings") + '" data-tab="settings">Settings</button>' : "") +
       "</div>";
-    return '<header class="top"><div class="brand"><span class="brand-mark"></span>Lumbung</div>' + tabs +
+    return '<header class="top"><div class="brand"><span class="brand-mark">' + MARK + '</span>Lumbung</div>' + tabs +
       '<div class="me"><span>' + esc(state.me.email) + '</span><span class="badge ' + (state.me.role === "user" ? "" : "accent") + '">' + ROLE_LABEL[state.me.role] + '</span><button class="btn small" id="logout">Sign out</button></div></header>';
   }
 
