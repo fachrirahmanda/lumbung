@@ -30,15 +30,49 @@ export const PAGE = `<!doctype html>
   input, select { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 7px 10px; }
   input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-  /* Sign-in */
-  .login { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
-  .login-card { width: min(400px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 32px 28px; text-align: center; box-shadow: 0 12px 40px rgb(42 26 18 / 0.08); }
-  .login-logo { width: 48px; height: 48px; display: grid; place-items: center; margin: 0 auto 16px; }
-  .login-logo svg, .brand-mark svg { width: 100%; height: 100%; display: block; }
-  .login-card h1 { margin: 0 0 6px; font-size: 22px; letter-spacing: -0.01em; }
-  .google { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; margin-top: 20px; padding: 10px 16px; border-radius: var(--radius); border: 1px solid var(--line); background: #fff; color: #1f1f1f; font: inherit; font-weight: 600; text-decoration: none; }
-  .google:hover { background: #f7f7f7; }
-  .login-note { margin-top: 18px; font-size: 13px; color: var(--muted); }
+  /* Sign-in: a dark brand panel on the left, the Google sign-in on the right (as in Silpasala). */
+  .login { min-height: 100vh; min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); background: var(--bg); }
+  .login-hero { position: relative; isolation: isolate; display: flex; flex-direction: column; gap: 32px; padding: 40px clamp(32px, 5vw, 64px); overflow: hidden; color: #fff; background: #2a1a12; box-shadow: inset -1px 0 0 rgb(255 255 255 / 0.08); }
+  .login-hero::before { content: ""; position: absolute; inset: 0; z-index: -1; background: radial-gradient(560px 380px at 88% 4%, rgb(255 255 255 / 0.14), transparent 70%), radial-gradient(520px 420px at 0% 100%, rgb(255 255 255 / 0.07), transparent 70%), linear-gradient(rgb(255 255 255 / 0.045) 1px, transparent 1px) 0 0 / 32px 32px, linear-gradient(90deg, rgb(255 255 255 / 0.045) 1px, transparent 1px) 0 0 / 32px 32px; mask-image: linear-gradient(to bottom, #000 45%, transparent); }
+  .login-brand { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+  .login-brand svg { width: 36px; height: 36px; display: block; border-radius: 9px; box-shadow: 0 0 0 1px rgb(255 255 255 / 0.18), 0 4px 14px rgb(0 0 0 / 0.4); }
+  .login-pitch { max-width: 30rem; margin-top: auto; }
+  .login-pitch h2 { margin: 0 0 10px; font-size: clamp(28px, 3vw, 40px); line-height: 1.1; letter-spacing: -0.03em; color: #fff; }
+  .login-pitch p { margin: 0; font-size: 16px; line-height: 1.5; color: rgb(255 255 255 / 0.7); }
+  .login-preview { display: flex; flex-direction: column; gap: 10px; max-width: 30rem; padding: 12px; border-radius: 12px; background: rgb(255 255 255 / 0.06); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12), 0 24px 60px rgb(0 0 0 / 0.5); }
+  .login-preview-row { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 9px; background: #fff; box-shadow: 0 2px 10px rgb(0 0 0 / 0.35); animation: login-float 6s ease infinite; animation-delay: calc(var(--i) * -2s); }
+  .login-chip { flex-shrink: 0; padding: 3px 7px; border-radius: 5px; background: var(--c); color: #fff; font-size: 11px; font-weight: 700; letter-spacing: 0.03em; }
+  .login-lines { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+  .login-lines i { display: block; height: 6px; border-radius: 3px; background: #e6dccb; }
+  .login-lines i.short { width: 38%; background: #ececee; }
+  @keyframes login-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+  @media (prefers-reduced-motion: reduce) { .login-preview-row { animation: none; } }
+  .login-highlights { display: grid; gap: 14px; max-width: 30rem; margin: 0; padding: 0; list-style: none; }
+  .login-highlights strong { display: block; font-size: 14px; color: #fff; }
+  .login-highlights span { font-size: 13.5px; line-height: 1.45; color: rgb(255 255 255 / 0.65); }
+  .login-main { position: relative; display: grid; place-items: center; padding: 72px 24px 32px; }
+  .login-card { width: min(400px, 100%); display: flex; flex-direction: column; gap: 18px; }
+  .login-card-logo svg { width: 44px; height: 44px; display: block; border-radius: 10px; box-shadow: 0 0 0 1px var(--line), 0 6px 18px rgb(0 0 0 / 0.18); }
+  .login-card-head h1 { margin: 0 0 6px; font-size: 30px; letter-spacing: -0.02em; }
+  .login-card-head p { margin: 0; color: var(--muted); font-size: 14px; }
+  .login-card .banner { margin: 0; }
+  .google-btn { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 48px; padding: 0 20px; border-radius: var(--radius); background: var(--surface); color: var(--text); font-weight: 600; text-decoration: none; box-shadow: 0 0 0 1px var(--line), 0 1px 2px rgb(42 26 18 / 0.08); transition: box-shadow 0.15s, background 0.15s; }
+  .google-btn:hover { background: color-mix(in srgb, var(--surface) 94%, var(--accent)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--line) 50%, var(--accent)), 0 6px 18px rgb(42 26 18 / 0.1); }
+  .google-btn:active { transform: scale(0.99); }
+  .login-note { margin: 0; padding: 12px 14px; border-radius: var(--radius); background: var(--fill); color: var(--muted); font-size: 13px; line-height: 1.45; }
+  @media (max-width: 900px) {
+    .login { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
+    .login-hero { gap: 22px; padding: 22px 24px 30px; border-radius: 0 0 16px 16px; box-shadow: inset 0 -1px 0 rgb(255 255 255 / 0.08); }
+    .login-pitch { margin-top: 6px; }
+    .login-pitch h2 { font-size: 30px; }
+    .login-pitch p { font-size: 15px; }
+    .login-preview { max-width: none; }
+    .login-highlights { display: none; }
+    .login-main { place-items: start center; padding: 28px 24px 32px; }
+    .login-card-logo { display: none; }
+    .login-card-head h1 { font-size: 26px; }
+  }
+  @media (max-width: 900px) and (max-height: 700px), (min-width: 901px) and (max-height: 720px) { .login-preview { display: none; } }
 
   /* App */
   header.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 24px; border-bottom: 1px solid var(--line); background: var(--surface); position: sticky; top: 0; z-index: 2; }
@@ -110,14 +144,27 @@ export const PAGE = `<!doctype html>
 
   function loginView() {
     var err = state.error ? '<div class="banner">' + esc(state.error) + "</div>" : "";
+    var rows = [["PDF", "#c62222", 70], ["PNG", "#ff5f1f", 56], ["CSV", "#137438", 82]].map(function (r, i) {
+      return '<div class="login-preview-row" style="--i:' + i + '"><span class="login-chip" style="--c:' + r[1] + '">' + r[0] + '</span><span class="login-lines"><i style="width:' + r[2] + '%"></i><i class="short"></i></span></div>';
+    }).join("");
     app.innerHTML =
-      '<div class="login"><div class="login-card">' +
-      '<div class="login-logo">' + MARK + "</div>" +
-      "<h1>Lumbung</h1><div class=\\"muted\\">Sign in with your Google account to continue.</div>" +
-      '<div style="margin-top:18px;text-align:left;">' + err + "</div>" +
-      '<a class="google" href="/auth/login">' + GOOGLE_MARK + "Continue with Google</a>" +
-      '<div class="login-note">Only invited accounts can sign in.</div>' +
-      "</div></div>";
+      '<div class="login">' +
+      '<aside class="login-hero">' +
+      '<div class="login-brand">' + MARK + "<span>Lumbung</span></div>" +
+      '<div class="login-pitch"><h2>Keep every file safe, in one place.</h2><p>Storage for Silpasala and other apps. Files are kept in Google Drive, and deleted files stay in the trash for 30 days.</p></div>' +
+      '<div class="login-preview" aria-hidden="true">' + rows + "</div>" +
+      '<ul class="login-highlights">' +
+      "<li><strong>Your own Google Drive</strong><span>Every file is stored in the Drive that the superadmin connects.</span></li>" +
+      "<li><strong>Invitation only</strong><span>Only the superadmin and members they invite can sign in.</span></li>" +
+      "<li><strong>Trash for 30 days</strong><span>Deleted files can be recovered before they are removed for good.</span></li>" +
+      "</ul></aside>" +
+      '<main class="login-main"><div class="login-card">' +
+      '<div class="login-card-logo">' + MARK + "</div>" +
+      '<div class="login-card-head"><h1>Welcome back</h1><p>Sign in with your Google account to continue.</p></div>' +
+      err +
+      '<a class="google-btn" href="/auth/login">' + GOOGLE_MARK + "Continue with Google</a>" +
+      '<p class="login-note">Access is by invitation only. Ask the superadmin to invite your email.</p>' +
+      "</div></main></div>";
   }
 
   function header() {
