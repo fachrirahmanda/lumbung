@@ -8,4 +8,6 @@ export interface Env {
   GOOGLE_CLIENT_SECRET: string;
   /** Encrypts the stored Drive token. Changing it disconnects Drive (the superadmin connects again). */
   SETTINGS_KEY?: string;
+  /** Token for the Silpasala app: it may only upload, download and delete its own files (app = silpasala). */
+  APP_TOKEN?: string;
 }

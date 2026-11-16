@@ -202,6 +202,12 @@ export async function downloadFile(env: Env, fileId: string) {
   return res;
 }
 
-export async function deleteFiles(env: Env, fileIds: string[]) {
-  for (const id of fileIds) await drive(env, `${API}/files/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
+/** Deletes files in Drive. Returns the ids that are gone (deleted now, or already missing). */
+export async function deleteFiles(env: Env, fileIds: string[]): Promise<string[]> {
+  const gone: string[] = [];
+  for (const id of fileIds) {
+    const res = await drive(env, `${API}/files/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => null);
+    if (res && (res.ok || res.status === 404)) gone.push(id);
+  }
+  return gone;
 }

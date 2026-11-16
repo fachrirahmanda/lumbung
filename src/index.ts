@@ -22,6 +22,8 @@ const OAUTH_COOKIE = 'lb_oauth';
 const SESSION_TTL = 30 * 24 * 3600 * 1000;
 /** Largest file accepted, in bytes. */
 const MAX_UPLOAD = 100 * 1024 * 1024;
+/** Days a deleted file stays in the trash before it is removed from Drive. */
+const TRASH_DAYS = 30;
 
 app.onError((err, c) => {
   if (err instanceof HTTPException) return c.json({ error: err.message }, err.status);
@@ -236,6 +238,10 @@ app.delete('/api/members/:email', async (c) => {
 });
 
 // ---------- files ----------
+// Two kinds of caller: a signed-in person (by role), or the Silpasala app with APP_TOKEN. The app
+// may only touch its own files (app = silpasala); its requests are checked before anything else.
+
+const APP = 'silpasala';
 
 type FileRow = { id: string; name: string; content_type: string; size: number; app: string; project: string | null; ref: string | null; uploaded_by: string; created_at: number };
 const fileInfo = (r: FileRow) => ({
@@ -258,19 +264,44 @@ const scopeOf = (value: string | undefined, label: string) => {
   return value;
 };
 
+/** Whether the request carries the app token (compared in constant time). */
+async function isAppRequest(c: Ctx): Promise<boolean> {
+  const expected = c.env.APP_TOKEN;
+  const header = c.req.header('authorization') ?? '';
+  if (!expected || !header.startsWith('Bearer ')) return false;
+  const given = new TextEncoder().encode(header.slice(7));
+  const want = new TextEncoder().encode(expected);
+  if (given.byteLength !== want.byteLength) return false;
+  return crypto.subtle.timingSafeEqual(given, want);
+}
+
+/** The file routes: the Silpasala app, or a signed-in person with at least `min`. */
+async function requireFiles(c: Ctx, min: 'user' | 'admin'): Promise<{ email: string; app: boolean }> {
+  if (await isAppRequest(c)) return { email: 'app:silpasala', app: true };
+  const me = await requireRole(c, min);
+  return { email: me.email, app: false };
+}
+
+/** The app can see only its own files. Others (and missing rows) answer 404. */
+const appMayTouch = (who: { app: boolean }, row: { app: string }) => !who.app || row.app === APP;
+
 // Files of one app and project: GET /api/files?app=silpasala&project=WEB
 app.get('/api/files', async (c) => {
-  await requireRole(c, 'user');
-  const appName = scopeOf(c.req.query('app'), 'app');
+  const who = await requireFiles(c, 'user');
+  let appName = scopeOf(c.req.query('app'), 'app');
   const project = scopeOf(c.req.query('project'), 'project');
-  const where = [appName ? 'app = ?' : '', project ? 'project = ?' : ''].filter(Boolean);
-  const sql = `SELECT id, name, content_type, size, app, project, ref, uploaded_by, created_at FROM files${where.length ? ` WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at DESC LIMIT 500`;
+  if (who.app) {
+    if (appName && appName !== APP) throw new HTTPException(403, { message: 'The app token reaches only its own files' });
+    appName = APP;
+  }
+  const where = ['deleted_at IS NULL', appName ? 'app = ?' : '', project ? 'project = ?' : ''].filter(Boolean);
+  const sql = `SELECT id, name, content_type, size, app, project, ref, uploaded_by, created_at FROM files WHERE ${where.join(' AND ')} ORDER BY created_at DESC LIMIT 500`;
   const { results } = await c.env.DB.prepare(sql).bind(...[appName, project].filter((v): v is string => !!v)).all<FileRow>();
   return c.json(results.map(fileInfo));
 });
 
 app.post('/api/files', async (c) => {
-  const me = await requireRole(c, 'user');
+  const who = await requireFiles(c, 'user');
   const name = (() => {
     try {
       return decodeURIComponent(c.req.header('x-file-name') ?? '').replace(/[\\/\u0000-\u001f]/g, '_').trim().slice(0, 120) || 'file';
@@ -285,14 +316,18 @@ app.post('/api/files', async (c) => {
   if (!data.byteLength) throw new HTTPException(400, { message: 'The file is empty' });
   if (data.byteLength > MAX_UPLOAD) throw new HTTPException(413, { message: 'The file is larger than 100 MB' });
   // Which app and project the file belongs to (x-app, x-project), and an app's own reference (x-ref).
-  const appName = scopeOf(c.req.header('x-app'), 'x-app') ?? 'storage';
+  let appName = scopeOf(c.req.header('x-app'), 'x-app') ?? 'storage';
+  if (who.app) {
+    if (appName !== APP && c.req.header('x-app')) throw new HTTPException(403, { message: 'The app token uploads only its own files' });
+    appName = APP;
+  }
   const project = scopeOf(c.req.header('x-project') ?? undefined, 'x-project');
   const ref = (() => {
     const v = c.req.header('x-ref')?.trim();
     return v ? v.slice(0, 200) : null;
   })();
   const driveId = await uploadFile(c.env, name, type, data);
-  const row: FileRow = { id: crypto.randomUUID(), name, content_type: type, size: data.byteLength, app: appName, project, ref, uploaded_by: me.email, created_at: now() };
+  const row: FileRow = { id: crypto.randomUUID(), name, content_type: type, size: data.byteLength, app: appName, project, ref, uploaded_by: who.email, created_at: now() };
   await c.env.DB.prepare('INSERT INTO files (id, name, content_type, size, drive_file_id, app, project, ref, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .bind(row.id, row.name, row.content_type, row.size, driveId, row.app, row.project, row.ref, row.uploaded_by, row.created_at)
     .run();
@@ -300,29 +335,50 @@ app.post('/api/files', async (c) => {
 });
 
 app.get('/api/files/:id', async (c) => {
-  await requireRole(c, 'user');
-  const row = await c.env.DB.prepare('SELECT name, content_type, drive_file_id FROM files WHERE id = ?').bind(c.req.param('id')).first<{ name: string; content_type: string; drive_file_id: string }>();
-  if (!row) throw new HTTPException(404, { message: 'No such file' });
+  const who = await requireFiles(c, 'user');
+  const row = await c.env.DB.prepare('SELECT name, content_type, drive_file_id, app FROM files WHERE id = ? AND deleted_at IS NULL').bind(c.req.param('id')).first<{ name: string; content_type: string; drive_file_id: string; app: string }>();
+  if (!row || !appMayTouch(who, row)) throw new HTTPException(404, { message: 'No such file' });
   const file = await downloadFile(c.env, row.drive_file_id);
   if (!file) throw new HTTPException(404, { message: 'This file is no longer in Google Drive' });
   const headers = new Headers({
     'content-type': row.content_type,
     'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(row.name)}`,
     'cache-control': 'private, max-age=300',
+    // Uploaded files never run as a page: no sniffing, no scripts, no styles.
+    'x-content-type-options': 'nosniff',
+    'content-security-policy': "default-src 'none'; sandbox",
   });
   return new Response(file.body, { headers });
 });
 
+/** Deleting marks the file; it is removed from Drive after 30 days (purgeTrash). */
 app.delete('/api/files/:id', async (c) => {
-  await requireRole(c, 'admin');
-  const row = await c.env.DB.prepare('DELETE FROM files WHERE id = ? RETURNING drive_file_id').bind(c.req.param('id')).first<{ drive_file_id: string }>();
-  if (!row) throw new HTTPException(404, { message: 'No such file' });
-  c.executionCtx.waitUntil(deleteFiles(c.env, [row.drive_file_id]).catch(() => {}));
+  const who = await requireFiles(c, 'admin');
+  const row = await c.env.DB.prepare('SELECT app FROM files WHERE id = ? AND deleted_at IS NULL').bind(c.req.param('id')).first<{ app: string }>();
+  if (!row || !appMayTouch(who, row)) throw new HTTPException(404, { message: 'No such file' });
+  await c.env.DB.prepare('UPDATE files SET deleted_at = ? WHERE id = ?').bind(now(), c.req.param('id')).run();
   return c.json({ ok: true });
 });
+
+/** Removes files deleted more than 30 days ago from Drive, then from the database. Files Drive could not remove stay for the next run. */
+async function purgeTrash(env: Env) {
+  const cutoff = now() - TRASH_DAYS * 24 * 3600 * 1000;
+  const { results } = await env.DB.prepare('SELECT id, drive_file_id FROM files WHERE deleted_at IS NOT NULL AND deleted_at < ? LIMIT 200').bind(cutoff).all<{ id: string; drive_file_id: string }>();
+  if (!results.length) return 0;
+  const gone = await deleteFiles(env, results.map((r) => r.drive_file_id));
+  const done = results.filter((r) => gone.includes(r.drive_file_id));
+  if (done.length) await env.DB.batch(done.map((r) => env.DB.prepare('DELETE FROM files WHERE id = ?').bind(r.id)));
+  return done.length;
+}
 
 // ---------- the page ----------
 
 app.get('/', (c) => c.html(PAGE));
 
-export default app;
+export default {
+  fetch: app.fetch,
+  /** Daily: empties the trash. */
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(purgeTrash(env).catch((err) => console.error('trash purge failed', err)));
+  },
+};
