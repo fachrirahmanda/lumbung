@@ -178,6 +178,37 @@ export const PAGE = `<!doctype html>
   .preview-table { overflow: auto; }
   .preview-table td, .preview-table th { white-space: nowrap; font-size: 13px; }
 
+  /* Files explorer: folder tree on the left, file table on the right */
+  .explorer { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: 70vh; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .tree { padding: 14px 10px; border-right: 1px solid var(--line); overflow-y: auto; }
+  .tree-title { padding: 4px 10px 10px; font-size: 13px; font-weight: 600; color: var(--muted); }
+  .tree-app { display: flex; flex-direction: column; }
+  .tree-row { display: flex; align-items: center; gap: 2px; }
+  .tree-chev { display: grid; place-items: center; width: 22px; height: 30px; flex-shrink: 0; border: 0; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; }
+  .tree-chev:hover { background: var(--fill); color: var(--text); }
+  .tree-item { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 30px; padding: 5px 8px; border: 0; border-radius: 6px; background: none; color: var(--text); font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; min-width: 0; }
+  .tree-item:hover { background: var(--fill); }
+  .tree-item.is-active { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+  .tree-item .grow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tree-ico { display: grid; flex-shrink: 0; color: var(--muted); }
+  .tree-item.is-active .tree-ico { color: var(--accent-ink); }
+  .tree-count { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .tree-child { padding-left: 34px; }
+  .tree-empty { padding: 8px 10px; }
+  .explorer-main { min-width: 0; padding: 18px 20px 20px; }
+  .explorer-main .card.flush { margin-bottom: 0; }
+  .bulk { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding: 8px 12px; border-radius: var(--radius); background: var(--accent-soft); font-size: 13px; }
+  .table-wrap { overflow-x: auto; }
+  th.fname, td.fname { min-width: 240px; }
+  td.check, th.check { width: 46px; padding-left: 16px; padding-right: 4px; }
+  input[type=checkbox] { width: 16px; height: 16px; margin: 0; padding: 0; accent-color: var(--accent); cursor: pointer; }
+  tr.is-selected td { background: var(--accent-soft); box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
+  .path { display: inline-block; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--accent-ink); }
+  @media (max-width: 800px) {
+    .explorer { grid-template-columns: minmax(0, 1fr); }
+    .tree { border-right: 0; border-bottom: 1px solid var(--line); max-height: 240px; }
+    .explorer-main { padding: 14px 12px 16px; }
+  }
   /* Settings tabs, Google Drive card, status colors */
   :root { --success: #137438; --warning: #a24b08; }
   @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --success: #34d399; --warning: #fbbf24; } }
@@ -236,7 +267,7 @@ export const PAGE = `<!doctype html>
   var app = document.getElementById("app");
   var modalHost = document.getElementById("modal");
   var TABS = ["home", "files", "settings"];
-  var state = { me: null, tab: "home", settingsTab: "drive", files: [], drive: null, members: [], apps: [], newToken: null, error: "", notice: "", nav: false, folder: null, preview: null };
+  var state = { me: null, tab: "home", settingsTab: "drive", expanded: {}, selected: {}, files: [], drive: null, members: [], apps: [], newToken: null, error: "", notice: "", nav: false, folder: null, preview: null };
   var hashTab = location.hash.slice(1);
   if (TABS.indexOf(hashTab) >= 0) state.tab = hashTab;
   var ERRORS = {
@@ -264,6 +295,8 @@ export const PAGE = `<!doctype html>
     trash: "M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14",
     chevL: "M15 18l-6-6 6-6",
     chevR: "M9 18l6-6-6-6",
+    chevD: "M6 9l6 6 6-6",
+    folder: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
     x: "M18 6L6 18M6 6l12 12",
     image: "M3 4h18v16H3zM3 16l5-5 4 4 3-3 6 6M15 8.5a1 1 0 1 0 0 .01",
     table: "M3 4h18v16H3zM3 10h18M3 15h18M9 4v16",
@@ -342,6 +375,7 @@ export const PAGE = `<!doctype html>
     state.error = "";
     state.notice = "";
     if (tab !== "files") state.folder = null;
+    state.selected = {};
     history.replaceState(null, "", "#" + tab);
     render();
     if (tab === "settings") loadSettings();
@@ -411,21 +445,11 @@ export const PAGE = `<!doctype html>
   }
 
   /* Files: one folder per project (grouped by app), and inside a folder its files. */
-  function folders() {
-    var map = {};
-    state.files.forEach(function (f) {
-      var key = f.app + "/" + (f.project || "");
-      var g = map[key] || (map[key] = { app: f.app, project: f.project || null, count: 0, bytes: 0, last: 0 });
-      g.count++;
-      g.bytes += f.size;
-      if (f.createdAt > g.last) g.last = f.createdAt;
-    });
-    return Object.keys(map).map(function (k) { return map[k]; }).sort(function (x, y) { return y.last - x.last; });
-  }
-
+  /* The files shown: all of them at the top, one app's, or one project's (project undefined = the whole app). */
   function folderFiles() {
     var fo = state.folder;
-    return state.files.filter(function (f) { return f.app === fo.app && (f.project || null) === fo.project; });
+    if (!fo) return state.files;
+    return state.files.filter(function (f) { return f.app === fo.app && (fo.project === undefined || (f.project || null) === fo.project); });
   }
 
   function kindOf(f) {
@@ -444,36 +468,76 @@ export const PAGE = `<!doctype html>
     return svg("doc", 18);
   }
 
-  function rootView() {
-    var list = folders();
-    var cards = list.map(function (g, i) {
-      return '<button type="button" class="folder" data-folder="' + i + '">' + '<span class="folder-icon">' + svg("files", 26) + '</span>' + '<span class="folder-name">' + esc(g.project || "No project") + '</span><span class="folder-sub">' + esc(g.app) + " · " + g.count + (g.count === 1 ? " file" : " files") + " · " + bytes(g.bytes) + "</span></button>";
-    }).join("");
-    return '<div class="page-head"><div><h1>Files</h1><p>Each project is a folder. Open one to see and read its files.</p></div></div>' +
-      (cards ? '<div class="folder-grid">' + cards + "</div>" : '<div class="card"><div class="empty">No files yet. Files uploaded from the apps appear here, in a folder per project.</div></div>');
+  /* Apps and their projects, for the folder tree. */
+  function appsTree() {
+    var apps = {}, order = [];
+    state.files.forEach(function (f) {
+      var a = apps[f.app];
+      if (!a) { a = apps[f.app] = { app: f.app, count: 0, projects: {} }; order.push(a); }
+      a.count++;
+      var key = f.project || "";
+      var p = a.projects[key] || (a.projects[key] = { project: f.project || null, count: 0 });
+      p.count++;
+    });
+    order.sort(function (x, y) { return x.app < y.app ? -1 : x.app > y.app ? 1 : 0; });
+    order.forEach(function (a) {
+      a.list = Object.keys(a.projects).map(function (k) { return a.projects[k]; });
+      a.list.sort(function (x, y) { var px = x.project || "", py = y.project || ""; return px < py ? -1 : px > py ? 1 : 0; });
+    });
+    return order;
   }
 
-  function folderView() {
+  /* The folder tree on the left: All files, then each app (expandable) with its projects. */
+  function treeView() {
+    var apps = appsTree();
     var fo = state.folder;
-    var list = folderFiles();
-    var total = list.reduce(function (sum, f) { return sum + f.size; }, 0);
-    var rows = list.map(function (f) {
-      var del = can("admin") ? '<button class="btn small danger" data-delete="' + esc(f.id) + '" aria-label="Delete ' + esc(f.name) + '">' + svg("trash", 14) + "</button>" : "";
-      return '<tr><td><div class="file-cell"><span class="file-kind">' + iconFor(f) + '</span><button type="button" class="file-name-btn" data-view="' + esc(f.id) + '">' + esc(f.name) + "</button></div></td>" +
-        '<td class="hide-sm muted">' + esc(f.contentType) + '</td><td class="num">' + bytes(f.size) + '</td><td class="hide-sm muted">' + esc(f.uploadedBy) + '<div class="meta">' + when(f.createdAt) + "</div></td>" +
-        '<td class="actions"><button class="btn small" data-view="' + esc(f.id) + '">' + svg("eye", 14) + ' View</button> <a class="btn small" href="/api/files/' + encodeURIComponent(f.id) + '" aria-label="Download ' + esc(f.name) + '">' + svg("download", 14) + "</a>" + del + "</td></tr>";
+    var item = function (cls, attrs, icon, label, count) {
+      return '<button type="button" class="tree-item' + cls + '"' + attrs + '><span class="tree-ico">' + svg(icon, 16) + '</span><span class="grow">' + esc(label) + '</span><span class="tree-count">' + count + "</span></button>";
+    };
+    var rows = apps.map(function (a) {
+      var open = state.expanded[a.app] !== false;
+      var sel = fo && fo.app === a.app && fo.project === undefined;
+      var kids = open ? a.list.map(function (p) {
+        var on = fo && fo.app === a.app && fo.project === p.project;
+        return item(on ? " tree-child is-active" : " tree-child", ' data-app="' + esc(a.app) + '" data-proj="' + esc(p.project || "") + '"', "folder", p.project || "No project", p.count);
+      }).join("") : "";
+      return '<div class="tree-app"><div class="tree-row"><button type="button" class="tree-chev" data-toggle="' + esc(a.app) + '" aria-label="' + (open ? "Collapse " : "Expand ") + esc(a.app) + '" aria-expanded="' + open + '">' + svg(open ? "chevD" : "chevR", 14) + "</button>" +
+        item(sel ? " is-active" : "", ' data-app="' + esc(a.app) + '"', "folder", a.app, a.count) + "</div>" + (kids ? '<div class="tree-kids">' + kids + "</div>" : "") + "</div>";
     }).join("");
-    return '<div class="crumbs"><button type="button" data-crumb="root">Files</button><span>/</span><span>' + esc(fo.app) + '</span><span>/</span><span class="here">' + esc(fo.project || "No project") + "</span></div>" +
-      '<div class="page-head"><div><h1>' + esc(fo.project || "No project") + '</h1><p>' + esc(fo.app) + " · " + list.length + (list.length === 1 ? " file" : " files") + " · " + bytes(total) + "</p></div>" +
-      '<button type="button" class="btn primary" id="pick">' + svg("upload", 15) + " Upload here</button></div>" +
-      '<div class="card"><label class="drop" id="drop"><strong>Drop files here</strong> to add them to this folder. Up to 100 MB each.<input id="file-input" type="file" multiple /></label>' +
-      '<div class="muted" id="upload-state" style="margin-top:10px;"></div></div>' +
-      '<div class="card flush"><table><thead><tr><th>Name</th><th class="hide-sm">Type</th><th class="num">Size</th><th class="hide-sm">Uploaded by</th><th></th></tr></thead><tbody>' +
-      rows + "</tbody></table>" + (list.length ? "" : '<div class="empty">This folder is empty.</div>') + "</div>";
+    return '<nav class="tree" aria-label="Folders"><div class="tree-title">Storage</div>' +
+      '<button type="button" class="tree-item' + (!fo ? " is-active" : "") + '" data-all><span class="tree-ico">' + svg("files", 16) + '</span><span class="grow">All files</span><span class="tree-count">' + state.files.length + "</span></button>" +
+      rows + (apps.length ? "" : '<div class="meta tree-empty">No folders yet.</div>') + "</nav>";
+  }
+
+  /* The table on the right: checkboxes, select all, bulk delete, and the path of each file. */
+  function listView() {
+    var list = folderFiles();
+    var fo = state.folder;
+    var total = list.reduce(function (sum, f) { return sum + f.size; }, 0);
+    var title = !fo ? "All files" : fo.project === undefined ? fo.app : (fo.project || "No project");
+    var crumbs = fo ? '<div class="crumbs"><button type="button" data-all>Files</button><span>/</span><span>' + esc(fo.app) + "</span>" + (fo.project !== undefined ? '<span>/</span><span class="here">' + esc(fo.project || "No project") + "</span>" : "") + "</div>" : "";
+    var selected = list.filter(function (f) { return state.selected[f.id]; });
+    var allSel = list.length > 0 && selected.length === list.length;
+    var bulk = selected.length ? '<div class="bulk"><span><strong>' + selected.length + '</strong> selected</span><span class="grow"></span><button type="button" class="btn small" id="bulk-clear">Clear</button>' +
+      (can("admin") ? '<button type="button" class="btn small danger" id="bulk-delete">' + svg("trash", 14) + " Delete</button>" : "") + "</div>" : "";
+    var upload = fo ? '<button type="button" class="btn primary" id="pick">' + svg("upload", 15) + " Upload here</button>" : "";
+    var drop = fo ? '<div class="card"><label class="drop" id="drop"><strong>Drop files here</strong> to add them to this folder. Up to 100 MB each.<input id="file-input" type="file" multiple /></label><div class="muted" id="upload-state" style="margin-top:10px;"></div></div>' : "";
+    var rows = list.map(function (f) {
+      var on = !!state.selected[f.id];
+      var path = "/" + f.app + (f.project ? "/" + f.project : "") + "/" + f.name;
+      var del = can("admin") ? '<button class="btn small danger" data-delete="' + esc(f.id) + '" aria-label="Delete ' + esc(f.name) + '">' + svg("trash", 14) + "</button>" : "";
+      return '<tr class="' + (on ? "is-selected" : "") + '"><td class="check"><input type="checkbox" data-check="' + esc(f.id) + '"' + (on ? " checked" : "") + ' aria-label="Select ' + esc(f.name) + '" /></td>' +
+        '<td class="fname"><div class="file-cell"><span class="file-kind">' + iconFor(f) + '</span><button type="button" class="file-name-btn" data-view="' + esc(f.id) + '">' + esc(f.name) + "</button></div></td>" +
+        '<td class="num">' + bytes(f.size) + '</td><td class="hide-sm muted">' + when(f.createdAt) + '</td><td class="hide-sm"><span class="path mono">' + esc(path) + "</span></td>" +
+        '<td class="actions"><a class="btn small" href="/api/files/' + encodeURIComponent(f.id) + '" aria-label="Download ' + esc(f.name) + '">' + svg("download", 14) + "</a>" + del + "</td></tr>";
+    }).join("");
+    return crumbs + '<div class="page-head"><div><h1>' + esc(title) + "</h1><p>" + list.length + (list.length === 1 ? " file" : " files") + " · " + bytes(total) + "</p></div>" + upload + "</div>" + drop + bulk +
+      '<div class="card flush table-wrap"><table><thead><tr><th class="check"><input type="checkbox" id="check-all" aria-label="Select all"' + (allSel ? " checked" : "") + ' /></th><th class="fname">Name</th><th class="num">Size</th><th class="hide-sm">Created</th><th class="hide-sm">Path</th><th></th></tr></thead><tbody>' +
+      rows + "</tbody></table>" + (list.length ? "" : '<div class="empty">' + (fo ? "This folder is empty." : "No files yet. Files uploaded from the apps appear here.") + "</div>") + "</div>";
   }
 
   function filesView() {
-    return state.folder ? folderView() : rootView();
+    return '<div class="explorer">' + treeView() + '<section class="explorer-main">' + listView() + "</section></div>";
   }
 
   /* Google Drive, laid out like Silpasala's storage card: logo, status, figures, notes, and actions. */
@@ -581,7 +645,7 @@ export const PAGE = `<!doctype html>
       '<div class="app' + (state.nav ? " nav-open" : "") + '">' + sidebar() +
       '<div class="backdrop" id="backdrop"></div>' +
       '<div class="content"><div class="topbar"><button type="button" class="menu-btn" id="menu" aria-label="Open navigation">' + svg("menu", 18) + '</button><span class="topbar-brand">' + MARK + "<span>Lumbung</span></span></div>" +
-      '<main class="' + (state.tab === "settings" ? "wide" : "") + '">' + notices() + pageView() + "</main></div></div>";
+      '<main class="' + (state.tab === "settings" || state.tab === "files" ? "wide" : "") + '">' + notices() + pageView() + "</main></div></div>";
     wireApp();
   }
 
@@ -609,28 +673,65 @@ export const PAGE = `<!doctype html>
   }
 
   function wireFiles() {
-    document.querySelectorAll("[data-folder]").forEach(function (b) {
+    document.querySelectorAll("[data-all]").forEach(function (b) {
+      b.onclick = function () { state.folder = null; state.selected = {}; render(); };
+    });
+    document.querySelectorAll("[data-app]").forEach(function (b) {
       b.onclick = function () {
-        var g = folders()[Number(b.getAttribute("data-folder"))];
-        if (!g) return;
-        state.folder = { app: g.app, project: g.project };
+        var proj = b.getAttribute("data-proj");
+        state.folder = { app: b.getAttribute("data-app"), project: proj === null ? undefined : proj === "" ? null : proj };
+        state.expanded[state.folder.app] = true;
+        state.selected = {};
         render();
       };
     });
-    document.querySelectorAll("[data-crumb]").forEach(function (b) {
-      b.onclick = function () { state.folder = null; render(); };
+    document.querySelectorAll("[data-toggle]").forEach(function (b) {
+      b.onclick = function () { var app = b.getAttribute("data-toggle"); state.expanded[app] = state.expanded[app] === false; render(); };
     });
+    document.querySelectorAll("[data-check]").forEach(function (c) {
+      c.onchange = function () {
+        var id = c.getAttribute("data-check");
+        if (c.checked) state.selected[id] = true; else delete state.selected[id];
+        render();
+      };
+    });
+    var all = document.getElementById("check-all");
+    if (all) all.onchange = function () {
+      folderFiles().forEach(function (f) { if (all.checked) state.selected[f.id] = true; else delete state.selected[f.id]; });
+      render();
+    };
+    var clear = document.getElementById("bulk-clear");
+    if (clear) clear.onclick = function () { state.selected = {}; render(); };
+    var bulkDelete = document.getElementById("bulk-delete");
+    if (bulkDelete) bulkDelete.onclick = bulkRemove;
     var input = document.getElementById("file-input");
-    if (!input) return;
-    var drop = document.getElementById("drop");
-    var pick = document.getElementById("pick");
-    pick.onclick = function () { input.click(); };
-    input.onchange = function (e) { upload(e.target.files, state.folder); e.target.value = ""; };
-    ["dragenter", "dragover"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("over"); }); });
-    ["dragleave", "drop"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("over"); }); });
-    drop.addEventListener("drop", function (e) { upload(e.dataTransfer.files, state.folder); });
+    if (input) {
+      var drop = document.getElementById("drop");
+      document.getElementById("pick").onclick = function () { input.click(); };
+      input.onchange = function (e) { upload(e.target.files, state.folder); e.target.value = ""; };
+      ["dragenter", "dragover"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("over"); }); });
+      ["dragleave", "drop"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("over"); }); });
+      drop.addEventListener("drop", function (e) { upload(e.dataTransfer.files, state.folder); });
+    }
     document.querySelectorAll("[data-delete]").forEach(function (b) {
       b.onclick = function () { removeFile(b.getAttribute("data-delete")); };
+    });
+  }
+
+  /* Moves every selected file to the trash, one request at a time. */
+  function bulkRemove() {
+    var ids = Object.keys(state.selected).filter(function (id) { return state.files.some(function (f) { return f.id === id; }); });
+    if (!ids.length || !confirm("Move " + ids.length + " file(s) to the trash? They are removed from Google Drive after 30 days.")) return;
+    ids.reduce(function (chain, id) {
+      return chain.then(function () { return api("/api/files/" + encodeURIComponent(id), { method: "DELETE" }); });
+    }, Promise.resolve()).then(function () {
+      state.selected = {};
+      notify(ids.length + " moved to the trash", false);
+      loadFiles();
+    }).catch(function (e) {
+      state.selected = {};
+      notify(e.message, true);
+      loadFiles();
     });
   }
 
