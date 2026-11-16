@@ -1,16 +1,16 @@
 {
-  // Silpasala storage: files kept in Google Drive, with its own sign-in and file list.
+  // Lumbung: files kept in Google Drive, with its own sign-in and file list.
   // Separate from the Silpasala Worker (its own D1 database and secrets).
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "silpasala-storage",
+  "name": "lumbung",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "silpasala-storage",
-      "database_id": "8a850550-aaf6-49b4-a68f-1cb92841cdf3",
+      "database_name": "lumbung",
+      "database_id": "fb1a0efd-fd10-48a3-9f13-e747440b0ae5",
       "migrations_dir": "migrations"
     }
   ]

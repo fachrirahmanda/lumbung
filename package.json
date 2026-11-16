@@ -1,5 +1,5 @@
 {
-  "name": "silpasala-storage",
+  "name": "lumbung",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,8 +8,8 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "typecheck": "tsc -p tsconfig.json",
-    "db:migrate:local": "wrangler d1 migrations apply silpasala-storage --local",
-    "db:migrate:remote": "wrangler d1 migrations apply silpasala-storage --remote"
+    "db:migrate:local": "wrangler d1 migrations apply lumbung --local",
+    "db:migrate:remote": "wrangler d1 migrations apply lumbung --remote"
   },
   "dependencies": {
     "hono": "^4.13.13"

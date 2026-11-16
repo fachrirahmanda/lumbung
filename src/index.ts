@@ -6,7 +6,7 @@ import type { Env } from './env';
 import { PAGE } from './page';
 import { base64url, now, randomToken, sha256 } from './util';
 
-// Silpasala storage: files kept in Google Drive, a sign-in for the admin, and the list of files.
+// Lumbung: files kept in Google Drive, a sign-in for the admin, and the list of files.
 // Silpasala (and, later, other platforms) use the /api/files routes; this page is for the admin.
 
 type AppEnv = { Bindings: Env };

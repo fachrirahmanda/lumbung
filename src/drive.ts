@@ -9,7 +9,7 @@ import { base64url, now } from './util';
 const API = 'https://www.googleapis.com/drive/v3';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
 export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
-const FOLDER_NAME = 'Silpasala storage';
+const FOLDER_NAME = 'Lumbung';
 
 type Settings = { refresh_token?: string; folder_id?: string; email?: string; connected_at?: string };
 
@@ -52,7 +52,7 @@ const secretOf = (env: Env) => env.SETTINGS_KEY || env.GOOGLE_CLIENT_SECRET;
 async function key(env: Env, info: string) {
   const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(secretOf(env)), 'HKDF', false, ['deriveKey']);
   return crypto.subtle.deriveKey(
-    { name: 'HKDF', hash: 'SHA-256', salt: new TextEncoder().encode('silpasala-storage'), info: new TextEncoder().encode(info) },
+    { name: 'HKDF', hash: 'SHA-256', salt: new TextEncoder().encode('lumbung'), info: new TextEncoder().encode(info) },
     material,
     { name: 'AES-GCM', length: 256 },
     false,
@@ -135,7 +135,7 @@ async function ensureFolder(env: Env, force = false) {
   const res = await drive(env, `${API}/files?fields=id`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ name: FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder', description: 'Files from Silpasala storage. Deleting files here breaks the links to them.' }),
+    body: JSON.stringify({ name: FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder', description: 'Files from Lumbung. Deleting files here breaks the links to them.' }),
   });
   if (!res.ok) throw new HTTPException(502, { message: `Could not create the Drive folder (${res.status})` });
   const { id } = await res.json<{ id: string }>();

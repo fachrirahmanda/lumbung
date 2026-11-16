@@ -4,7 +4,7 @@ export const PAGE = `<!doctype html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Silpasala storage</title>
+<title>Lumbung</title>
 <style>
   :root { --bg: #f5f0e6; --surface: #fffdf8; --text: #2a1a12; --muted: #7a6a5e; --line: #e4dccd; --accent: #d9480f; --danger: #b42318; --radius: 12px; }
   @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --bg: #2a1a12; --surface: #35251c; --text: #f5f0e6; --muted: #b9a999; --line: #4a3628; } }
@@ -40,7 +40,7 @@ export const PAGE = `<!doctype html>
 <main>
   <header>
     <div>
-      <h1>Silpasala storage</h1>
+      <h1>Lumbung</h1>
       <div class="muted" id="who">&nbsp;</div>
     </div>
     <div id="account"></div>

@@ -1,4 +1,4 @@
-# Silpasala storage
+# Lumbung
 
 A file storage Worker on Cloudflare. Files are kept in Google Drive. An admin signs in with Google, connects the Drive account, and manages the files on a simple page. Other apps (such as Silpasala) use the file API.
 
@@ -11,7 +11,7 @@ A file storage Worker on Cloudflare. Files are kept in Google Drive. An admin si
 1. Create the database and put its id in `wrangler.jsonc`:
 
    ```bash
-   npx wrangler d1 create silpasala-storage
+   npx wrangler d1 create lumbung
    ```
 
 2. Create a Google OAuth client (or reuse the one from the app that created the files, see below). Add these redirect URIs:
