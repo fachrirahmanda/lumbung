@@ -327,7 +327,7 @@ export const PAGE = `<!doctype html>
     }).join("");
     var byApp = appList.map(function (a) {
       var pct = maxBytes ? Math.max(4, Math.round((a.bytes / maxBytes) * 100)) : 0;
-      return '<div class="list-row" style="flex-direction:column;align-items:stretch;gap:0;"><div class="row"><span class="name">' + esc(a.name) + '</span><span class="meta">' + a.count + " files · " + bytes(a.bytes) + '</span></div><div class="bar-track"><div class="bar-fill" style="width:' + pct + '%"></div></div></div>';
+      return '<div class="list-row" style="flex-direction:column;align-items:stretch;gap:0;"><div class="row"><span class="name">' + esc(a.name) + '</span><span class="meta">' + a.count + (a.count === 1 ? " file" : " files") + " · " + bytes(a.bytes) + '</span></div><div class="bar-track"><div class="bar-fill" style="width:' + pct + '%"></div></div></div>';
     }).join("");
     return '<div class="page-head"><div><h1>Overview</h1><p>Everything stored in Lumbung, at a glance.</p></div>' +
       '<button type="button" class="btn primary" data-tab="files">' + svg("upload", 15) + " Upload files</button></div>" +
