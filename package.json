@@ -1,0 +1,22 @@
+{
+  "name": "silpasala-storage",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "File storage Worker on Cloudflare: files kept in Google Drive, an admin sign-in, and a file API for other apps.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc -p tsconfig.json",
+    "db:migrate:local": "wrangler d1 migrations apply silpasala-storage --local",
+    "db:migrate:remote": "wrangler d1 migrations apply silpasala-storage --remote"
+  },
+  "dependencies": {
+    "hono": "^4.13.13"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261116.1",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.151.1"
+  }
+}

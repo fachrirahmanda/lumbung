@@ -1,0 +1,17 @@
+{
+  // Silpasala storage: files kept in Google Drive, with its own sign-in and file list.
+  // Separate from the Silpasala Worker (its own D1 database and secrets).
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "silpasala-storage",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "silpasala-storage",
+      "database_id": "8a850550-aaf6-49b4-a68f-1cb92841cdf3",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

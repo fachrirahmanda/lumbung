@@ -1,0 +1,7 @@
+# Copy to .dev.vars for local development. Never commit .dev.vars.
+# Use the same Google OAuth client as the app that created the files (drive.file scope).
+ADMIN_EMAIL=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+# Encrypts the stored Google Drive token. Any long random string.
+SETTINGS_KEY=
