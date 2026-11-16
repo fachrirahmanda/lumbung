@@ -1,4 +1,4 @@
-/** The Lumbung page: sign in with Google, an overview, files, and settings (Google Drive and members). Plain HTML and script, no build. */
+/** The Lumbung page: sign in with Google, an overview, files (folders per project, with previews), and settings. Plain HTML and script, no build. */
 export const PAGE = `<!doctype html>
 <html lang="en">
 <head>
@@ -29,8 +29,8 @@ export const PAGE = `<!doctype html>
   .btn.primary:hover { background: var(--accent-hover); }
   .btn.danger { color: var(--danger); }
   .btn.small { padding: 4px 10px; font-size: 13px; }
-  .btn:focus-visible, .side-link:focus-visible, .theme-switch button:focus-visible, .menu-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .btn:disabled { opacity: 0.6; cursor: progress; }
+  .btn:focus-visible, .side-link:focus-visible, .theme-switch button:focus-visible, .menu-btn:focus-visible, .folder:focus-visible, .file-name-btn:focus-visible, .crumbs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn:disabled { opacity: 0.5; cursor: default; }
   .badge { display: inline-block; padding: 2px 8px; border-radius: 6px; background: var(--fill); color: var(--muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
   .badge.accent { background: var(--accent-soft); color: var(--accent-ink); }
   .banner { margin: 0 0 16px; border-radius: var(--radius); padding: 12px 16px; background: color-mix(in srgb, var(--danger) 10%, var(--surface)); color: var(--danger); white-space: pre-line; }
@@ -114,9 +114,13 @@ export const PAGE = `<!doctype html>
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
   .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
   .row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; justify-content: space-between; }
-  .drop { border: 1.5px dashed var(--line); border-radius: 12px; padding: 24px; text-align: center; color: var(--muted); cursor: pointer; display: block; }
+  .drop { border: 1.5px dashed var(--line); border-radius: 12px; padding: 22px; text-align: center; color: var(--muted); cursor: pointer; display: block; }
   .drop:hover, .drop.over { border-color: var(--accent); color: var(--text); background: var(--accent-soft); }
   input[type=file] { display: none; }
+  .card.flush { padding: 0; overflow: hidden; margin-bottom: 0; }
+  .empty { padding: 28px 8px; text-align: center; color: var(--muted); }
+  .meta { font-size: 12px; color: var(--muted); }
+  .grow { flex: 1; min-width: 0; }
 
   /* Overview */
   .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
@@ -127,14 +131,25 @@ export const PAGE = `<!doctype html>
   .two { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 16px; align-items: start; }
   .list-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
   .list-row:last-child { border-bottom: 0; padding-bottom: 0; }
-  .list-row .grow { flex: 1; min-width: 0; }
   .list-row .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .meta { font-size: 12px; color: var(--muted); }
   .bar-track { height: 6px; margin-top: 6px; border-radius: 3px; background: var(--fill); overflow: hidden; }
   .bar-fill { height: 100%; border-radius: 3px; background: var(--accent); }
-  .empty { padding: 28px 8px; text-align: center; color: var(--muted); }
 
-  /* Tables */
+  /* Files: folders per project, then the files inside */
+  .crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; font-size: 13px; color: var(--muted); }
+  .crumbs button { padding: 2px 6px; border: 0; border-radius: 6px; background: none; color: var(--muted); font: inherit; cursor: pointer; }
+  .crumbs button:hover { background: var(--fill); color: var(--text); }
+  .crumbs .here { color: var(--text); font-weight: 600; }
+  .folder-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+  .folder { display: flex; flex-direction: column; gap: 10px; padding: 16px; text-align: left; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+  .folder:hover { border-color: var(--accent); background: color-mix(in srgb, var(--surface) 92%, var(--accent)); }
+  .folder-icon { color: var(--accent-ink); }
+  .folder-name { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .folder-sub { font-size: 12px; color: var(--muted); }
+  .file-cell { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .file-kind { flex-shrink: 0; color: var(--muted); display: grid; place-items: center; }
+  .file-name-btn { min-width: 0; padding: 0; border: 0; background: none; color: var(--text); font: inherit; font-weight: 600; text-align: left; word-break: break-word; cursor: pointer; }
+  .file-name-btn:hover { color: var(--accent-ink); text-decoration: underline; }
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
   th { color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: 0.02em; background: var(--surface-2); }
@@ -147,7 +162,21 @@ export const PAGE = `<!doctype html>
   .name { font-weight: 600; word-break: break-word; }
   .form-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 16px; }
   .form-row input[type=email] { flex: 1 1 260px; }
-  .card.flush { padding: 0; overflow: hidden; }
+
+  /* Preview dialog */
+  #modal:empty { display: none; }
+  .modal-bg { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 20px; background: rgb(20 12 8 / 0.6); }
+  .modal { width: min(1000px, 100%); height: min(88vh, 900px); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: 0 30px 80px rgb(0 0 0 / 0.4); }
+  .modal-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px 12px 18px; border-bottom: 1px solid var(--line); }
+  .modal-body { flex: 1; min-height: 0; overflow: auto; display: flex; align-items: center; justify-content: center; background: var(--surface-2); }
+  .modal-body.is-text { display: block; background: var(--surface); }
+  .modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--line); }
+  .preview-img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+  .preview-frame { width: 100%; height: 100%; border: 0; background: #fff; }
+  .preview-text { margin: 0; padding: 18px; white-space: pre-wrap; word-break: break-word; font: 13px/1.55 ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace; }
+  .preview-note { padding: 8px 18px; font-size: 12px; color: var(--muted); }
+  .preview-table { overflow: auto; }
+  .preview-table td, .preview-table th { white-space: nowrap; font-size: 13px; }
 
   @media (max-width: 1100px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 900px) {
@@ -166,18 +195,21 @@ export const PAGE = `<!doctype html>
     main { padding: 20px 16px 48px; }
     .kpis { gap: 10px; }
     .kpi-value { font-size: 22px; }
-    .me-line { word-break: break-all; }
+    .modal-bg { padding: 0; }
+    .modal { width: 100%; height: 100%; border-radius: 0; border: 0; }
   }
   @media (max-width: 480px) { .kpis { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
 </style>
 </head>
 <body>
 <div id="app"></div>
+<div id="modal"></div>
 <script>
 (function () {
   var app = document.getElementById("app");
+  var modalHost = document.getElementById("modal");
   var TABS = ["home", "files", "settings"];
-  var state = { me: null, tab: "home", files: [], drive: null, members: [], error: "", notice: "" };
+  var state = { me: null, tab: "home", files: [], drive: null, members: [], error: "", notice: "", nav: false, folder: null, preview: null };
   var hashTab = location.hash.slice(1);
   if (TABS.indexOf(hashTab) >= 0) state.tab = hashTab;
   var ERRORS = {
@@ -201,6 +233,14 @@ export const PAGE = `<!doctype html>
     logout: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
     upload: "M12 16V4M7 9l5-5 5 5M4 20h16",
     download: "M12 4v12M7 11l5 5 5-5M4 20h16",
+    eye: "M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
+    trash: "M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14",
+    chevL: "M15 18l-6-6 6-6",
+    chevR: "M9 18l6-6-6-6",
+    x: "M18 6L6 18M6 6l12 12",
+    image: "M3 4h18v16H3zM3 16l5-5 4 4 3-3 6 6M15 8.5a1 1 0 1 0 0 .01",
+    table: "M3 4h18v16H3zM3 10h18M3 15h18M9 4v16",
+    doc: "M6 2h9l5 5v15H6zM14 2v6h6M9 13h7M9 17h7",
     system: "M3 4h18v12H3zM8 20h8M12 16v4",
     light: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4",
     dark: "M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"
@@ -274,6 +314,7 @@ export const PAGE = `<!doctype html>
     state.nav = false;
     state.error = "";
     state.notice = "";
+    if (tab !== "files") state.folder = null;
     history.replaceState(null, "", "#" + tab);
     render();
     if (tab === "settings") loadSettings();
@@ -321,8 +362,8 @@ export const PAGE = `<!doctype html>
       return '<div class="kpi"><div class="kpi-label">' + label + '</div><div class="kpi-value">' + value + '</div><div class="kpi-sub">' + sub + "</div></div>";
     };
     var recent = files.slice(0, 6).map(function (f) {
-      var scope = esc(f.app) + (f.project ? " · " + esc(f.project) : "") + (f.ref ? " · " + esc(f.ref) : "");
-      return '<div class="list-row"><div class="grow"><div class="name">' + esc(f.name) + '</div><div class="meta">' + scope + " · " + when(f.createdAt) + '</div></div>' +
+      var scope = esc(f.app) + (f.project ? " · " + esc(f.project) : "");
+      return '<div class="list-row"><div class="grow"><button type="button" class="file-name-btn" data-view="' + esc(f.id) + '">' + esc(f.name) + '</button><div class="meta">' + scope + " · " + when(f.createdAt) + '</div></div>' +
         '<span class="meta">' + bytes(f.size) + '</span><a class="btn small" href="/api/files/' + encodeURIComponent(f.id) + '" aria-label="Download ' + esc(f.name) + '">' + svg("download", 14) + "</a></div>";
     }).join("");
     var byApp = appList.map(function (a) {
@@ -342,18 +383,70 @@ export const PAGE = `<!doctype html>
       '<div class="card"><div class="card-head"><h2>By app</h2></div>' + (byApp || '<div class="empty">Nothing stored yet.</div>') + "</div></div>";
   }
 
-  function filesView() {
-    var rows = state.files.map(function (f) {
-      var del = can("admin") ? '<button class="btn small danger" data-delete="' + esc(f.id) + '">Delete</button>' : "";
-      var scope = esc(f.app) + (f.project ? " · " + esc(f.project) : "") + (f.ref ? '<div class="muted" style="font-size:12px;">' + esc(f.ref) + "</div>" : "");
-      return "<tr><td class=\\"name\\">" + esc(f.name) + "</td><td class=\\"hide-sm\\">" + scope + '</td><td class="hide-sm muted">' + esc(f.contentType) + '</td><td class="num">' + bytes(f.size) + '</td><td class="hide-sm muted">' + esc(f.uploadedBy) + "<div style=\\"font-size:12px;\\">" + when(f.createdAt) + "</div></td>" +
-        '<td class="actions"><a class="btn small" href="/api/files/' + encodeURIComponent(f.id) + '">Download</a>' + del + "</td></tr>";
+  /* Files: one folder per project (grouped by app), and inside a folder its files. */
+  function folders() {
+    var map = {};
+    state.files.forEach(function (f) {
+      var key = f.app + "/" + (f.project || "");
+      var g = map[key] || (map[key] = { app: f.app, project: f.project || null, count: 0, bytes: 0, last: 0 });
+      g.count++;
+      g.bytes += f.size;
+      if (f.createdAt > g.last) g.last = f.createdAt;
+    });
+    return Object.keys(map).map(function (k) { return map[k]; }).sort(function (x, y) { return y.last - x.last; });
+  }
+
+  function folderFiles() {
+    var fo = state.folder;
+    return state.files.filter(function (f) { return f.app === fo.app && (f.project || null) === fo.project; });
+  }
+
+  function kindOf(f) {
+    var ct = f.contentType || "";
+    if (ct.indexOf("image/") === 0) return "image";
+    if (ct === "application/pdf") return "pdf";
+    if (ct === "text/csv") return "csv";
+    if (ct === "text/plain" || ct === "text/markdown" || ct === "application/json") return "text";
+    return "none";
+  }
+
+  function iconFor(f) {
+    var k = kindOf(f);
+    if (k === "image") return svg("image", 18);
+    if (k === "csv" || /sheet|excel/.test(f.contentType || "")) return svg("table", 18);
+    return svg("doc", 18);
+  }
+
+  function rootView() {
+    var list = folders();
+    var cards = list.map(function (g, i) {
+      return '<button type="button" class="folder" data-folder="' + i + '">' + '<span class="folder-icon">' + svg("files", 26) + '</span>' + '<span class="folder-name">' + esc(g.project || "No project") + '</span><span class="folder-sub">' + esc(g.app) + " · " + g.count + (g.count === 1 ? " file" : " files") + " · " + bytes(g.bytes) + "</span></button>";
     }).join("");
-    return '<div class="page-head"><div><h1>Files</h1><p>Upload here, or from an app that uses Lumbung.</p></div></div>' +
-      '<div class="card"><label class="drop" id="drop"><strong>Drop files here</strong> or click to choose. Up to 100 MB each.<input id="file-input" type="file" multiple /></label>' +
+    return '<div class="page-head"><div><h1>Files</h1><p>Each project is a folder. Open one to see and read its files.</p></div></div>' +
+      (cards ? '<div class="folder-grid">' + cards + "</div>" : '<div class="card"><div class="empty">No files yet. Files uploaded from the apps appear here, in a folder per project.</div></div>');
+  }
+
+  function folderView() {
+    var fo = state.folder;
+    var list = folderFiles();
+    var total = list.reduce(function (sum, f) { return sum + f.size; }, 0);
+    var rows = list.map(function (f) {
+      var del = can("admin") ? '<button class="btn small danger" data-delete="' + esc(f.id) + '" aria-label="Delete ' + esc(f.name) + '">' + svg("trash", 14) + "</button>" : "";
+      return '<tr><td><div class="file-cell"><span class="file-kind">' + iconFor(f) + '</span><button type="button" class="file-name-btn" data-view="' + esc(f.id) + '">' + esc(f.name) + "</button></div></td>" +
+        '<td class="hide-sm muted">' + esc(f.contentType) + '</td><td class="num">' + bytes(f.size) + '</td><td class="hide-sm muted">' + esc(f.uploadedBy) + '<div class="meta">' + when(f.createdAt) + "</div></td>" +
+        '<td class="actions"><button class="btn small" data-view="' + esc(f.id) + '">' + svg("eye", 14) + ' View</button> <a class="btn small" href="/api/files/' + encodeURIComponent(f.id) + '" aria-label="Download ' + esc(f.name) + '">' + svg("download", 14) + "</a>" + del + "</td></tr>";
+    }).join("");
+    return '<div class="crumbs"><button type="button" data-crumb="root">Files</button><span>/</span><span>' + esc(fo.app) + '</span><span>/</span><span class="here">' + esc(fo.project || "No project") + "</span></div>" +
+      '<div class="page-head"><div><h1>' + esc(fo.project || "No project") + '</h1><p>' + esc(fo.app) + " · " + list.length + (list.length === 1 ? " file" : " files") + " · " + bytes(total) + "</p></div>" +
+      '<button type="button" class="btn primary" id="pick">' + svg("upload", 15) + " Upload here</button></div>" +
+      '<div class="card"><label class="drop" id="drop"><strong>Drop files here</strong> to add them to this folder. Up to 100 MB each.<input id="file-input" type="file" multiple /></label>' +
       '<div class="muted" id="upload-state" style="margin-top:10px;"></div></div>' +
-      '<div class="card flush"><table><thead><tr><th>Name</th><th class="hide-sm">App / project</th><th class="hide-sm">Type</th><th class="num">Size</th><th class="hide-sm">Uploaded by</th><th></th></tr></thead><tbody>' +
-      rows + "</tbody></table>" + (state.files.length ? "" : '<div class="empty">No files yet.</div>') + "</div>";
+      '<div class="card flush"><table><thead><tr><th>Name</th><th class="hide-sm">Type</th><th class="num">Size</th><th class="hide-sm">Uploaded by</th><th></th></tr></thead><tbody>' +
+      rows + "</tbody></table>" + (list.length ? "" : '<div class="empty">This folder is empty.</div>') + "</div>";
+  }
+
+  function filesView() {
+    return state.folder ? folderView() : rootView();
   }
 
   function driveCard() {
@@ -414,6 +507,7 @@ export const PAGE = `<!doctype html>
   }
 
   function render() {
+    renderModal();
     if (!state.me) return loginView();
     appView();
   }
@@ -428,24 +522,47 @@ export const PAGE = `<!doctype html>
     document.querySelectorAll("[data-tab]").forEach(function (b) {
       b.onclick = function () { setTab(b.getAttribute("data-tab")); };
     });
+    document.querySelectorAll("[data-view]").forEach(function (b) {
+      b.onclick = function () { openPreview(b.getAttribute("data-view")); };
+    });
     if (state.tab === "files") wireFiles();
     else if (state.tab === "settings" && can("admin")) wireSettings();
   }
 
   function wireFiles() {
-    var input = document.getElementById("file-input");
-    var drop = document.getElementById("drop");
-    input.onchange = function (e) { upload(e.target.files); e.target.value = ""; };
-    ["dragenter", "dragover"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("over"); }); });
-    ["dragleave", "drop"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("over"); }); });
-    drop.addEventListener("drop", function (e) { upload(e.dataTransfer.files); });
-    document.querySelectorAll("[data-delete]").forEach(function (b) {
+    document.querySelectorAll("[data-folder]").forEach(function (b) {
       b.onclick = function () {
-        var f = state.files.filter(function (x) { return x.id === b.getAttribute("data-delete"); })[0];
-        if (!f || !confirm("Delete " + f.name + "? Its file is removed from Google Drive too.")) return;
-        api("/api/files/" + encodeURIComponent(f.id), { method: "DELETE" }).then(loadFiles).catch(function (e) { notify(e.message, true); });
+        var g = folders()[Number(b.getAttribute("data-folder"))];
+        if (!g) return;
+        state.folder = { app: g.app, project: g.project };
+        render();
       };
     });
+    document.querySelectorAll("[data-crumb]").forEach(function (b) {
+      b.onclick = function () { state.folder = null; render(); };
+    });
+    var input = document.getElementById("file-input");
+    if (!input) return;
+    var drop = document.getElementById("drop");
+    var pick = document.getElementById("pick");
+    pick.onclick = function () { input.click(); };
+    input.onchange = function (e) { upload(e.target.files, state.folder); e.target.value = ""; };
+    ["dragenter", "dragover"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("over"); }); });
+    ["dragleave", "drop"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("over"); }); });
+    drop.addEventListener("drop", function (e) { upload(e.dataTransfer.files, state.folder); });
+    document.querySelectorAll("[data-delete]").forEach(function (b) {
+      b.onclick = function () { removeFile(b.getAttribute("data-delete")); };
+    });
+  }
+
+  function removeFile(id) {
+    var f = state.files.filter(function (x) { return x.id === id; })[0];
+    if (!f || !confirm("Delete " + f.name + "? It goes to the trash for 30 days, then it is removed from Google Drive.")) return;
+    api("/api/files/" + encodeURIComponent(id), { method: "DELETE" }).then(function () {
+      if (state.preview && state.preview.id === id) closePreview();
+      notify("Moved to the trash", false);
+      loadFiles();
+    }).catch(function (e) { notify(e.message, true); });
   }
 
   function wireSettings() {
@@ -483,7 +600,8 @@ export const PAGE = `<!doctype html>
     };
   }
 
-  function upload(list) {
+  /* Uploads go into the folder that is open (its app and project); the drop zone is only in folders. */
+  function upload(list, folder) {
     var files = Array.prototype.slice.call(list);
     if (!files.length) return;
     var done = 0, failed = [];
@@ -491,11 +609,9 @@ export const PAGE = `<!doctype html>
     if (label) label.textContent = "Uploading…";
     files.reduce(function (chain, file) {
       return chain.then(function () {
-        return fetch("/api/files", {
-          method: "POST",
-          headers: { "content-type": file.type || "application/octet-stream", "x-file-name": encodeURIComponent(file.name) },
-          body: file
-        }).then(function (res) {
+        var headers = { "content-type": file.type || "application/octet-stream", "x-file-name": encodeURIComponent(file.name) };
+        if (folder) { headers["x-app"] = folder.app; if (folder.project) headers["x-project"] = folder.project; }
+        return fetch("/api/files", { method: "POST", headers: headers, body: file }).then(function (res) {
           if (!res.ok) return res.json().catch(function () { return {}; }).then(function (b) { failed.push(file.name + ": " + (b.error || res.status)); });
           done++;
         });
@@ -506,6 +622,117 @@ export const PAGE = `<!doctype html>
       loadFiles();
     });
   }
+
+  /* Preview: the file is fetched with the session and shown from a local blob. Images and PDFs show
+     as they are, text and CSV as text, and other types can only be downloaded. */
+  function parseCsv(text) {
+    var rows = [], row = [], cell = "", q = false;
+    for (var i = 0; i < text.length && rows.length < 1000; i++) {
+      var c = text.charAt(i);
+      if (q) {
+        if (c === '"') { if (text.charAt(i + 1) === '"') { cell += '"'; i++; } else q = false; } else cell += c;
+      } else if (c === '"') q = true;
+      else if (c === ",") { row.push(cell); cell = ""; }
+      else if (c === "\\n") { row.push(cell); rows.push(row); row = []; cell = ""; }
+      else if (c !== "\\r") cell += c;
+    }
+    if (cell.length || row.length) { row.push(cell); rows.push(row); }
+    return rows;
+  }
+
+  function visibleFiles() {
+    return state.folder ? folderFiles() : state.files;
+  }
+
+  function openPreview(id) {
+    if (state.preview) closePreview(true);
+    var f = state.files.filter(function (x) { return x.id === id; })[0];
+    if (!f) return;
+    state.preview = { id: id, status: "loading", url: null, text: null, error: "" };
+    renderModal();
+    var kind = kindOf(f);
+    if (kind === "none") { state.preview.status = "none"; renderModal(); return; }
+    fetch("/api/files/" + encodeURIComponent(id)).then(function (res) {
+      if (!res.ok) return res.json().catch(function () { return {}; }).then(function (b) { throw new Error(b.error || "The file could not be loaded."); });
+      return res.blob();
+    }).then(function (blob) {
+      var p = state.preview;
+      if (!p || p.id !== id) return;
+      if (kind === "text" || kind === "csv") return blob.text().then(function (t) { p.text = t.slice(0, 500000); p.truncated = t.length > 500000; });
+      p.url = URL.createObjectURL(blob);
+    }).then(function () {
+      if (state.preview && state.preview.id === id) { state.preview.status = "ready"; renderModal(); }
+    }).catch(function (e) {
+      if (state.preview && state.preview.id === id) { state.preview.status = "error"; state.preview.error = e.message; renderModal(); }
+    });
+  }
+
+  function closePreview(keepState) {
+    if (state.preview && state.preview.url) URL.revokeObjectURL(state.preview.url);
+    state.preview = null;
+    if (!keepState) renderModal();
+  }
+
+  function stepPreview(delta) {
+    if (!state.preview) return;
+    var list = visibleFiles();
+    var i = -1;
+    list.forEach(function (f, k) { if (f.id === state.preview.id) i = k; });
+    var next = list[i + delta];
+    if (next) openPreview(next.id);
+  }
+
+  function previewBody(p, f) {
+    if (p.status === "loading") return '<div class="empty">Loading…</div>';
+    if (p.status === "error") return '<div class="empty">' + esc(p.error) + "</div>";
+    if (p.status === "none") return '<div class="empty">No preview for this type (' + esc(f.contentType) + "). Download it to open it.</div>";
+    var kind = kindOf(f);
+    if (kind === "image") return '<img class="preview-img" src="' + p.url + '" alt="' + esc(f.name) + '" />';
+    if (kind === "pdf") return '<iframe class="preview-frame" src="' + p.url + '" title="' + esc(f.name) + '"></iframe>';
+    if (kind === "csv") {
+      var rows = parseCsv(p.text || "");
+      if (!rows.length) return '<div class="empty">This file is empty.</div>';
+      return '<div class="preview-table"><table>' + rows.map(function (r, i) {
+        return "<tr>" + r.map(function (c) { return i === 0 ? "<th>" + esc(c) + "</th>" : "<td>" + esc(c) + "</td>"; }).join("") + "</tr>";
+      }).join("") + "</table></div>" + (p.truncated ? '<div class="preview-note">Showing the first 1,000 rows.</div>' : "");
+    }
+    return '<pre class="preview-text">' + esc(p.text) + "</pre>" + (p.truncated ? '<div class="preview-note">Showing the first 500 KB. Download the file for the rest.</div>' : "");
+  }
+
+  function renderModal() {
+    var p = state.preview;
+    if (!p) { modalHost.innerHTML = ""; return; }
+    var f = state.files.filter(function (x) { return x.id === p.id; })[0];
+    if (!f) { closePreview(true); modalHost.innerHTML = ""; return; }
+    var list = visibleFiles();
+    var idx = 0;
+    list.forEach(function (x, k) { if (x.id === p.id) idx = k; });
+    var del = can("admin") ? '<button type="button" class="btn small danger" id="pv-delete">' + svg("trash", 14) + " Delete</button>" : "";
+    var isText = kindOf(f) === "text" || kindOf(f) === "csv";
+    modalHost.innerHTML =
+      '<div class="modal-bg" id="pv-bg"><div class="modal" role="dialog" aria-modal="true" aria-label="' + esc(f.name) + '">' +
+      '<div class="modal-head"><div class="grow"><div class="name">' + esc(f.name) + '</div><div class="meta">' + esc(f.contentType) + " · " + bytes(f.size) + " · " + esc(f.uploadedBy) + " · " + when(f.createdAt) + "</div></div>" +
+      '<a class="btn small" href="/api/files/' + encodeURIComponent(f.id) + '">' + svg("download", 14) + " Download</a>" + del +
+      '<button type="button" class="btn small" id="pv-close" aria-label="Close preview">' + svg("x", 14) + "</button></div>" +
+      '<div class="modal-body' + (isText ? " is-text" : "") + '">' + previewBody(p, f) + "</div>" +
+      '<div class="modal-foot"><button type="button" class="btn small" id="pv-prev"' + (idx === 0 ? " disabled" : "") + ">" + svg("chevL", 14) + " Previous</button>" +
+      '<span class="meta">' + (idx + 1) + " of " + list.length + "</span>" +
+      '<button type="button" class="btn small" id="pv-next"' + (idx >= list.length - 1 ? " disabled" : "") + '>Next ' + svg("chevR", 14) + "</button></div>" +
+      "</div></div>";
+    document.getElementById("pv-close").onclick = function () { closePreview(); };
+    document.getElementById("pv-bg").onclick = function (e) { if (e.target.id === "pv-bg") closePreview(); };
+    document.getElementById("pv-prev").onclick = function () { stepPreview(-1); };
+    document.getElementById("pv-next").onclick = function () { stepPreview(1); };
+    var d = document.getElementById("pv-delete");
+    if (d) d.onclick = function () { removeFile(f.id); };
+  }
+
+  document.addEventListener("keydown", function (e) {
+    if (!state.preview) return;
+    if (e.key === "Escape") closePreview();
+    else if (e.key === "ArrowLeft") stepPreview(-1);
+    else if (e.key === "ArrowRight") stepPreview(1);
+  });
 
   function loadFiles() {
     return api("/api/files").then(function (list) { state.files = list; render(); });
