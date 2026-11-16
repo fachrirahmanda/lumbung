@@ -6,42 +6,58 @@ import type { Env } from './env';
 import { PAGE } from './page';
 import { base64url, now, randomToken, sha256 } from './util';
 
-// Lumbung: files kept in Google Drive, a sign-in for the admin, and the list of files.
-// Silpasala (and, later, other platforms) use the /api/files routes; this page is for the admin.
+// Lumbung: files kept in Google Drive. Only the superadmin and the members listed in D1 can sign in.
+// Silpasala (and, later, other platforms) use the /api/files routes; the page is for people with an account.
 
 type AppEnv = { Bindings: Env };
 type Ctx = Context<AppEnv>;
 const app = new Hono<AppEnv>();
 
-const SESSION_COOKIE = 'st_session';
-const OAUTH_COOKIE = 'st_oauth';
+type Role = 'user' | 'admin' | 'superadmin';
+type Me = { email: string; role: Role };
+const RANK: Record<Role, number> = { user: 1, admin: 2, superadmin: 3 };
+
+const SESSION_COOKIE = 'lb_session';
+const OAUTH_COOKIE = 'lb_oauth';
 const SESSION_TTL = 30 * 24 * 3600 * 1000;
 /** Largest file accepted, in bytes. */
 const MAX_UPLOAD = 100 * 1024 * 1024;
 
 app.onError((err, c) => {
   if (err instanceof HTTPException) return c.json({ error: err.message }, err.status);
-  console.error('storage error', err);
+  console.error('lumbung error', err);
   return c.json({ error: 'Something went wrong' }, 500);
 });
 
-// ---------- sign-in (admin only) ----------
+// ---------- who is signed in ----------
 
-/** The admin's email if the request has a valid session, else null. */
-async function currentAdmin(c: Ctx): Promise<string | null> {
+const superadmin = (env: Env) => env.SUPERADMIN_EMAIL.toLowerCase();
+
+/** The role of an email: the superadmin, an active member, or nobody. */
+async function roleOf(env: Env, email: string): Promise<Me | null> {
+  if (email === superadmin(env)) return { email, role: 'superadmin' };
+  const row = await env.DB.prepare("SELECT role FROM members WHERE email = ? AND status = 'active'").bind(email).first<{ role: 'user' | 'admin' }>();
+  return row ? { email, role: row.role } : null;
+}
+
+/** The signed-in person (with their current role), or null. */
+async function currentMe(c: Ctx): Promise<Me | null> {
   const token = getCookieValue(c.req.raw, SESSION_COOKIE);
   if (!token) return null;
-  const row = await c.env.DB.prepare('SELECT email FROM sessions WHERE id_hash = ? AND expires_at > ?').bind(await sha256(token), now()).first<{ email: string }>();
-  return row?.email ?? null;
+  const session = await c.env.DB.prepare('SELECT email FROM sessions WHERE id_hash = ? AND expires_at > ?').bind(await sha256(token), now()).first<{ email: string }>();
+  if (!session) return null;
+  return roleOf(c.env, session.email);
 }
 
-async function requireAdmin(c: Ctx) {
-  const email = await currentAdmin(c);
-  if (!email) throw new HTTPException(401, { message: 'Sign in as the admin first' });
-  return email;
+/** Requires a signed-in person with at least `min`. Roles: user < admin < superadmin. */
+async function requireRole(c: Ctx, min: Role): Promise<Me> {
+  const me = await currentMe(c);
+  if (!me) throw new HTTPException(401, { message: 'Sign in first' });
+  if (RANK[me.role] < RANK[min]) throw new HTTPException(403, { message: 'Your role cannot do this' });
+  return me;
 }
 
-/** Reads one cookie from the request (the cookie helpers need a context, so this is used where one isn't handy). */
+/** Reads one cookie from the request. */
 function getCookieValue(req: Request, name: string) {
   const header = req.headers.get('cookie') ?? '';
   for (const part of header.split(';')) {
@@ -76,7 +92,7 @@ async function startOAuth(c: Ctx, purpose: 'login' | 'drive') {
 app.get('/auth/login', (c) => startOAuth(c, 'login'));
 
 app.get('/auth/drive', async (c) => {
-  await requireAdmin(c);
+  await requireRole(c, 'superadmin');
   return startOAuth(c, 'drive');
 });
 
@@ -91,7 +107,8 @@ app.get('/auth/callback', async (c) => {
   if (!raw || !code || url.searchParams.get('state') !== state) return fail('state');
 
   if (purpose === 'drive') {
-    if (!(await currentAdmin(c))) return fail('signin');
+    const me = await currentMe(c);
+    if (me?.role !== 'superadmin') return fail('signin');
     try {
       await connectDrive(c.env, code, verifier, redirectUri(c.req.url));
     } catch (err) {
@@ -111,7 +128,12 @@ app.get('/auth/callback', async (c) => {
   const { access_token } = await token.json<{ access_token: string }>();
   const info = await (await fetch('https://openidconnect.googleapis.com/v1/userinfo', { headers: { authorization: `Bearer ${access_token}` } })).json<{ email?: string; email_verified?: boolean }>();
   const email = (info.email ?? '').toLowerCase();
-  if (!info.email_verified || email !== c.env.ADMIN_EMAIL.toLowerCase()) return fail('not_admin');
+  if (!info.email_verified) return fail('unverified');
+  const me = await roleOf(c.env, email);
+  if (!me) {
+    const member = await c.env.DB.prepare('SELECT status FROM members WHERE email = ?').bind(email).first<{ status: string }>();
+    return fail(member?.status === 'disabled' ? 'disabled' : 'not_invited');
+  }
 
   const session = randomToken(32);
   const t = now();
@@ -127,23 +149,93 @@ app.post('/auth/logout', async (c) => {
   return c.json({ ok: true });
 });
 
-// ---------- API ----------
+// ---------- me, Drive ----------
 
 app.get('/api/me', async (c) => {
-  const email = await requireAdmin(c);
-  return c.json({ email });
+  const me = await requireRole(c, 'user');
+  return c.json(me);
 });
 
 app.get('/api/drive', async (c) => {
-  await requireAdmin(c);
+  await requireRole(c, 'admin');
   return c.json(await driveStatus(c.env));
 });
 
 app.post('/api/drive/disconnect', async (c) => {
-  await requireAdmin(c);
+  await requireRole(c, 'superadmin');
   await disconnectDrive(c.env);
   return c.json({ ok: true });
 });
+
+// ---------- members (superadmin manages, admins see) ----------
+
+type MemberRow = { email: string; role: 'user' | 'admin'; status: string; invited_by: string | null; created_at: number };
+const memberInfo = (r: MemberRow) => ({ email: r.email, role: r.role, status: r.status, invitedBy: r.invited_by, createdAt: r.created_at, fixed: false });
+
+async function listMembers(env: Env) {
+  const { results } = await env.DB.prepare('SELECT email, role, status, invited_by, created_at FROM members ORDER BY created_at').all<MemberRow>();
+  // The superadmin is always first and cannot be changed or removed here.
+  return [{ email: superadmin(env), role: 'superadmin', status: 'active', invitedBy: null, createdAt: null, fixed: true }, ...results.map(memberInfo)];
+}
+
+const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
+const cleanEmail = (value: unknown) => {
+  const email = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (!EMAIL.test(email)) throw new HTTPException(400, { message: 'Enter a valid email address' });
+  return email;
+};
+const cleanRole = (value: unknown): 'user' | 'admin' => {
+  if (value === 'user' || value === 'admin') return value;
+  throw new HTTPException(400, { message: 'The role must be admin or user' });
+};
+
+app.get('/api/members', async (c) => {
+  await requireRole(c, 'admin');
+  return c.json(await listMembers(c.env));
+});
+
+app.post('/api/members', async (c) => {
+  const me = await requireRole(c, 'superadmin');
+  const body = await c.req.json<{ email?: unknown; role?: unknown }>().catch(() => ({}) as { email?: unknown; role?: unknown });
+  const email = cleanEmail(body.email);
+  if (email === superadmin(c.env)) throw new HTTPException(400, { message: 'That is the superadmin account' });
+  const role = cleanRole(body.role);
+  await c.env.DB.prepare(
+    "INSERT INTO members (email, role, status, invited_by, created_at) VALUES (?, ?, 'active', ?, ?) ON CONFLICT (email) DO UPDATE SET role = excluded.role, status = 'active'",
+  ).bind(email, role, me.email, now()).run();
+  return c.json(await listMembers(c.env), 201);
+});
+
+app.patch('/api/members/:email', async (c) => {
+  await requireRole(c, 'superadmin');
+  const email = cleanEmail(c.req.param('email'));
+  if (email === superadmin(c.env)) throw new HTTPException(400, { message: 'The superadmin cannot be changed here' });
+  const body = await c.req.json<{ role?: unknown; status?: unknown }>().catch(() => ({}) as { role?: unknown; status?: unknown });
+  if (body.role !== undefined) {
+    const role = cleanRole(body.role);
+    await c.env.DB.prepare('UPDATE members SET role = ? WHERE email = ?').bind(role, email).run();
+  }
+  if (body.status !== undefined) {
+    if (body.status !== 'active' && body.status !== 'disabled') throw new HTTPException(400, { message: 'Status must be active or disabled' });
+    await c.env.DB.prepare('UPDATE members SET status = ? WHERE email = ?').bind(body.status, email).run();
+    // A disabled member is signed out everywhere.
+    if (body.status === 'disabled') await c.env.DB.prepare('DELETE FROM sessions WHERE email = ?').bind(email).run();
+  }
+  return c.json(await listMembers(c.env));
+});
+
+app.delete('/api/members/:email', async (c) => {
+  await requireRole(c, 'superadmin');
+  const email = cleanEmail(c.req.param('email'));
+  if (email === superadmin(c.env)) throw new HTTPException(400, { message: 'The superadmin cannot be removed' });
+  await c.env.DB.batch([
+    c.env.DB.prepare('DELETE FROM sessions WHERE email = ?').bind(email),
+    c.env.DB.prepare('DELETE FROM members WHERE email = ?').bind(email),
+  ]);
+  return c.json(await listMembers(c.env));
+});
+
+// ---------- files ----------
 
 type FileRow = { id: string; name: string; content_type: string; size: number; app: string; project: string | null; ref: string | null; uploaded_by: string; created_at: number };
 const fileInfo = (r: FileRow) => ({
@@ -168,17 +260,17 @@ const scopeOf = (value: string | undefined, label: string) => {
 
 // Files of one app and project: GET /api/files?app=silpasala&project=WEB
 app.get('/api/files', async (c) => {
-  await requireAdmin(c);
-  const app = scopeOf(c.req.query('app'), 'app');
+  await requireRole(c, 'user');
+  const appName = scopeOf(c.req.query('app'), 'app');
   const project = scopeOf(c.req.query('project'), 'project');
-  const where = [app ? 'app = ?' : '', project ? 'project = ?' : ''].filter(Boolean);
+  const where = [appName ? 'app = ?' : '', project ? 'project = ?' : ''].filter(Boolean);
   const sql = `SELECT id, name, content_type, size, app, project, ref, uploaded_by, created_at FROM files${where.length ? ` WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at DESC LIMIT 500`;
-  const { results } = await c.env.DB.prepare(sql).bind(...[app, project].filter((v): v is string => !!v)).all<FileRow>();
+  const { results } = await c.env.DB.prepare(sql).bind(...[appName, project].filter((v): v is string => !!v)).all<FileRow>();
   return c.json(results.map(fileInfo));
 });
 
 app.post('/api/files', async (c) => {
-  const email = await requireAdmin(c);
+  const me = await requireRole(c, 'user');
   const name = (() => {
     try {
       return decodeURIComponent(c.req.header('x-file-name') ?? '').replace(/[\\/\u0000-\u001f]/g, '_').trim().slice(0, 120) || 'file';
@@ -200,7 +292,7 @@ app.post('/api/files', async (c) => {
     return v ? v.slice(0, 200) : null;
   })();
   const driveId = await uploadFile(c.env, name, type, data);
-  const row: FileRow = { id: crypto.randomUUID(), name, content_type: type, size: data.byteLength, app: appName, project, ref, uploaded_by: email, created_at: now() };
+  const row: FileRow = { id: crypto.randomUUID(), name, content_type: type, size: data.byteLength, app: appName, project, ref, uploaded_by: me.email, created_at: now() };
   await c.env.DB.prepare('INSERT INTO files (id, name, content_type, size, drive_file_id, app, project, ref, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .bind(row.id, row.name, row.content_type, row.size, driveId, row.app, row.project, row.ref, row.uploaded_by, row.created_at)
     .run();
@@ -208,7 +300,7 @@ app.post('/api/files', async (c) => {
 });
 
 app.get('/api/files/:id', async (c) => {
-  await requireAdmin(c);
+  await requireRole(c, 'user');
   const row = await c.env.DB.prepare('SELECT name, content_type, drive_file_id FROM files WHERE id = ?').bind(c.req.param('id')).first<{ name: string; content_type: string; drive_file_id: string }>();
   if (!row) throw new HTTPException(404, { message: 'No such file' });
   const file = await downloadFile(c.env, row.drive_file_id);
@@ -222,7 +314,7 @@ app.get('/api/files/:id', async (c) => {
 });
 
 app.delete('/api/files/:id', async (c) => {
-  await requireAdmin(c);
+  await requireRole(c, 'admin');
   const row = await c.env.DB.prepare('DELETE FROM files WHERE id = ? RETURNING drive_file_id').bind(c.req.param('id')).first<{ drive_file_id: string }>();
   if (!row) throw new HTTPException(404, { message: 'No such file' });
   c.executionCtx.waitUntil(deleteFiles(c.env, [row.drive_file_id]).catch(() => {}));

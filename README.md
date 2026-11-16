@@ -1,10 +1,16 @@
 # Lumbung
 
-A file storage Worker on Cloudflare. Files are kept in Google Drive. An admin signs in with Google, connects the Drive account, and manages the files on a simple page. Other apps (such as Silpasala) use the file API.
+A file storage Worker on Cloudflare. Files are kept in Google Drive. People sign in with Google, only invited accounts can get in, and the files are managed on a simple page. Other apps (such as Silpasala) use the file API.
 
-- **Storage:** Google Drive (scope `drive.file`: the app only sees files it created).
-- **Metadata:** Cloudflare D1. Each file records its name, type, size, the app and project it belongs to, an optional reference from that app, and who uploaded it.
-- **Access:** only the admin email (set as a secret) can sign in. Sessions are stored as hashes.
+## Roles
+
+| Role | Files | Settings |
+| --- | --- | --- |
+| **Superadmin** (the `SUPERADMIN_EMAIL` account) | Upload, download, delete | Connect and disconnect Google Drive; add, remove, disable and change roles of members |
+| **Admin** | Upload, download, delete | See Google Drive status and the member list |
+| **User** | Upload, download | None |
+
+Only the superadmin and active members can sign in. Anyone else sees "not invited".
 
 ## Setup
 
@@ -14,7 +20,7 @@ A file storage Worker on Cloudflare. Files are kept in Google Drive. An admin si
    npx wrangler d1 create lumbung
    ```
 
-2. Create a Google OAuth client (or reuse the one from the app that created the files, see below). Add these redirect URIs:
+2. Create a Google OAuth client, or reuse the one from the app that created the files (see below). Add these redirect URIs:
 
    - `http://localhost:8788/auth/callback` (local development)
    - `https://<your-worker>.workers.dev/auth/callback` (production)
@@ -22,7 +28,7 @@ A file storage Worker on Cloudflare. Files are kept in Google Drive. An admin si
 3. Set the secrets:
 
    ```bash
-   npx wrangler secret put ADMIN_EMAIL
+   npx wrangler secret put SUPERADMIN_EMAIL
    npx wrangler secret put GOOGLE_CLIENT_ID
    npx wrangler secret put GOOGLE_CLIENT_SECRET
    npx wrangler secret put SETTINGS_KEY
@@ -38,7 +44,11 @@ A file storage Worker on Cloudflare. Files are kept in Google Drive. An admin si
    npm run deploy
    ```
 
-5. Open the Worker URL, sign in, and connect Google Drive.
+5. Sign in as the superadmin, then connect Google Drive under Settings.
+
+### Adding members
+
+The superadmin adds members under Settings → Members, choosing a role. The superadmin account itself is not stored in the database; it comes from the `SUPERADMIN_EMAIL` secret.
 
 ### Reusing an existing OAuth client
 
@@ -54,17 +64,21 @@ npm run dev                      # http://localhost:8788
 
 ## API
 
-All `/api/*` routes need an admin session (sign in first).
+All `/api/*` routes need a signed-in person with the role listed.
 
-| Method | Path | What it does |
-| --- | --- | --- |
-| `GET` | `/api/me` | The signed-in admin |
-| `GET` | `/api/drive` | Whether Drive is connected, and as which account |
-| `POST` | `/api/drive/disconnect` | Disconnects Drive and revokes the token |
-| `GET` | `/api/files` | Files, newest first. Filter with `?app=` and `?project=` |
-| `POST` | `/api/files` | Upload. The body is the file. See the headers below |
-| `GET` | `/api/files/:id` | Download |
-| `DELETE` | `/api/files/:id` | Delete the file here and in Drive |
+| Method | Path | Role | What it does |
+| --- | --- | --- | --- |
+| `GET` | `/api/me` | user | The signed-in person and their role |
+| `GET` | `/api/drive` | admin | Whether Drive is connected, and as which account |
+| `POST` | `/api/drive/disconnect` | superadmin | Disconnects Drive and revokes the token |
+| `GET` | `/api/members` | admin | The members and the superadmin |
+| `POST` | `/api/members` | superadmin | Adds or re-enables a member: `{ "email", "role" }` |
+| `PATCH` | `/api/members/:email` | superadmin | Changes `role` (`admin` or `user`) or `status` (`active` or `disabled`) |
+| `DELETE` | `/api/members/:email` | superadmin | Removes a member and signs them out |
+| `GET` | `/api/files` | user | Files, newest first. Filter with `?app=` and `?project=` |
+| `POST` | `/api/files` | user | Upload. The body is the file. See the headers below |
+| `GET` | `/api/files/:id` | user | Download |
+| `DELETE` | `/api/files/:id` | admin | Delete the file here and in Drive |
 
 Upload headers:
 
@@ -80,4 +94,5 @@ App and project names may contain only letters, digits, `-` and `_` (up to 40 ch
 
 - Secrets live in Cloudflare (`wrangler secret put`), never in this repository. `.dev.vars` and `.wrangler/` are git-ignored.
 - The Drive refresh token is encrypted at rest with a key derived from `SETTINGS_KEY`.
-- Session cookies are `HttpOnly`, `Secure` and `SameSite=Lax`.
+- Session cookies are `HttpOnly`, `Secure` and `SameSite=Lax`. Sessions store only a hash of the token.
+- A member's role is read on every request, and disabling or removing a member signs them out.
