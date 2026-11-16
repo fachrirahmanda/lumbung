@@ -237,11 +237,79 @@ app.delete('/api/members/:email', async (c) => {
   return c.json(await listMembers(c.env));
 });
 
-// ---------- files ----------
-// Two kinds of caller: a signed-in person (by role), or the Silpasala app with APP_TOKEN. The app
-// may only touch its own files (app = silpasala); its requests are checked before anything else.
+// ---------- apps (superadmin adds them; admins see them) ----------
+// Each app that stores files has its own token, kept only as a hash. Silpasala is built in: its
+// token is the APP_TOKEN secret (set with wrangler), so it is listed here but not managed.
 
-const APP = 'silpasala';
+const LEGACY_APP = 'silpasala';
+const APP_SLUG = /^[a-z0-9][a-z0-9_-]{1,39}$/;
+const RESERVED_APPS = [LEGACY_APP, 'storage'];
+
+type AppRow = { slug: string; name: string; created_by: string; created_at: number; rotated_at: number | null; revoked_at: number | null };
+
+async function listApps(env: Env) {
+  const { results } = await env.DB.prepare('SELECT slug, name, created_by, created_at, rotated_at, revoked_at FROM apps ORDER BY created_at').all<AppRow>();
+  const { results: counts } = await env.DB.prepare('SELECT app, COUNT(*) AS n FROM files WHERE deleted_at IS NULL GROUP BY app').all<{ app: string; n: number }>();
+  const filesOf = (slug: string) => counts.find((r) => r.app === slug)?.n ?? 0;
+  const apps = results.map((r) => ({
+    slug: r.slug, name: r.name, createdBy: r.created_by, createdAt: r.created_at, rotatedAt: r.rotated_at, revoked: r.revoked_at !== null, files: filesOf(r.slug), builtIn: false,
+  }));
+  const builtIn = env.APP_TOKEN ? [{ slug: LEGACY_APP, name: 'Silpasala', createdBy: null, createdAt: null, rotatedAt: null, revoked: false, files: filesOf(LEGACY_APP), builtIn: true }] : [];
+  return [...builtIn, ...apps];
+}
+
+/** A new token: shown once to the superadmin, stored only as its SHA-256. */
+const newAppToken = () => `lmb_${randomToken(32)}`;
+
+app.get('/api/apps', async (c) => {
+  await requireRole(c, 'admin');
+  return c.json(await listApps(c.env));
+});
+
+app.post('/api/apps', async (c) => {
+  const me = await requireRole(c, 'superadmin');
+  const body = await c.req.json<{ slug?: unknown; name?: unknown }>().catch(() => ({}) as { slug?: unknown; name?: unknown });
+  const slug = typeof body.slug === 'string' ? body.slug.trim().toLowerCase() : '';
+  if (!APP_SLUG.test(slug)) throw new HTTPException(400, { message: 'The app code is 2 to 40 characters: lowercase letters, digits, - or _' });
+  if (RESERVED_APPS.includes(slug)) throw new HTTPException(400, { message: 'That app code is reserved' });
+  const name = typeof body.name === 'string' ? body.name.trim().replace(/\s+/g, ' ') : '';
+  if (!name || name.length > 60) throw new HTTPException(400, { message: 'Enter the app name (up to 60 characters)' });
+  const taken = await c.env.DB.prepare('SELECT 1 FROM apps WHERE slug = ?').bind(slug).first();
+  if (taken) throw new HTTPException(409, { message: 'An app with that code already exists' });
+  const token = newAppToken();
+  await c.env.DB.prepare('INSERT INTO apps (slug, name, token_hash, created_by, created_at) VALUES (?, ?, ?, ?, ?)')
+    .bind(slug, name, await sha256(token), me.email, now())
+    .run();
+  return c.json({ token, apps: await listApps(c.env) }, 201);
+});
+
+/** A new token for an app (also turns a revoked app back on). The old token stops working at once. */
+app.post('/api/apps/:slug/rotate', async (c) => {
+  await requireRole(c, 'superadmin');
+  const slug = c.req.param('slug');
+  if (slug === LEGACY_APP) throw new HTTPException(400, { message: "Silpasala's token is the APP_TOKEN secret: change it with wrangler secret put" });
+  const token = newAppToken();
+  const res = await c.env.DB.prepare('UPDATE apps SET token_hash = ?, rotated_at = ?, revoked_at = NULL WHERE slug = ?').bind(await sha256(token), now(), slug).run();
+  if (!res.meta.changes) throw new HTTPException(404, { message: 'No such app' });
+  return c.json({ token, apps: await listApps(c.env) });
+});
+
+app.post('/api/apps/:slug/revoke', async (c) => {
+  await requireRole(c, 'superadmin');
+  const slug = c.req.param('slug');
+  if (slug === LEGACY_APP) throw new HTTPException(400, { message: "Silpasala's token is the APP_TOKEN secret: change it with wrangler secret put" });
+  const res = await c.env.DB.prepare('UPDATE apps SET revoked_at = ? WHERE slug = ? AND revoked_at IS NULL').bind(now(), slug).run();
+  if (!res.meta.changes && !(await c.env.DB.prepare('SELECT 1 FROM apps WHERE slug = ?').bind(slug).first())) throw new HTTPException(404, { message: 'No such app' });
+  return c.json({ apps: await listApps(c.env) });
+});
+
+// ---------- files ----------
+// Two kinds of caller: a signed-in person (by role), or an app with its token (apps table, or
+// APP_TOKEN for Silpasala). An app may only touch its own files (row.app = the app's code); its
+// requests are checked before anything else.
+
+/** Who a file request is: an app (its code), or a signed-in person (app null). */
+type Who = { email: string; app: string | null };
 
 type FileRow = { id: string; name: string; content_type: string; size: number; app: string; project: string | null; ref: string | null; uploaded_by: string; created_at: number };
 const fileInfo = (r: FileRow) => ({
@@ -264,35 +332,41 @@ const scopeOf = (value: string | undefined, label: string) => {
   return value;
 };
 
-/** Whether the request carries the app token (compared in constant time). */
-async function isAppRequest(c: Ctx): Promise<boolean> {
-  const expected = c.env.APP_TOKEN;
+/** The app a request's Bearer token belongs to (APP_TOKEN is Silpasala; others are in the apps table), or null. */
+async function appOf(c: Ctx): Promise<string | null> {
   const header = c.req.header('authorization') ?? '';
-  if (!expected || !header.startsWith('Bearer ')) return false;
-  const given = new TextEncoder().encode(header.slice(7));
-  const want = new TextEncoder().encode(expected);
-  if (given.byteLength !== want.byteLength) return false;
-  return crypto.subtle.timingSafeEqual(given, want);
+  if (!header.startsWith('Bearer ')) return null;
+  const given = header.slice(7);
+  const expected = c.env.APP_TOKEN;
+  if (expected) {
+    const a = new TextEncoder().encode(given);
+    const b = new TextEncoder().encode(expected);
+    if (a.byteLength === b.byteLength && crypto.subtle.timingSafeEqual(a, b)) return LEGACY_APP;
+  }
+  if (!given) return null;
+  const row = await c.env.DB.prepare('SELECT slug FROM apps WHERE token_hash = ? AND revoked_at IS NULL').bind(await sha256(given)).first<{ slug: string }>();
+  return row?.slug ?? null;
 }
 
-/** The file routes: the Silpasala app, or a signed-in person with at least `min`. */
-async function requireFiles(c: Ctx, min: 'user' | 'admin'): Promise<{ email: string; app: boolean }> {
-  if (await isAppRequest(c)) return { email: 'app:silpasala', app: true };
+/** The file routes: an app with its token, or a signed-in person with at least `min`. */
+async function requireFiles(c: Ctx, min: 'user' | 'admin'): Promise<Who> {
+  const app = await appOf(c);
+  if (app) return { email: `app:${app}`, app };
   const me = await requireRole(c, min);
-  return { email: me.email, app: false };
+  return { email: me.email, app: null };
 }
 
-/** The app can see only its own files. Others (and missing rows) answer 404. */
-const appMayTouch = (who: { app: boolean }, row: { app: string }) => !who.app || row.app === APP;
+/** An app sees only its own files. Others (and missing rows) answer 404. */
+const appMayTouch = (who: Who, row: { app: string }) => who.app === null || row.app === who.app;
 
 // Files of one app and project: GET /api/files?app=silpasala&project=WEB
 app.get('/api/files', async (c) => {
   const who = await requireFiles(c, 'user');
   let appName = scopeOf(c.req.query('app'), 'app');
   const project = scopeOf(c.req.query('project'), 'project');
-  if (who.app) {
-    if (appName && appName !== APP) throw new HTTPException(403, { message: 'The app token reaches only its own files' });
-    appName = APP;
+  if (who.app !== null) {
+    if (appName && appName !== who.app) throw new HTTPException(403, { message: "This token reaches only its own app's files" });
+    appName = who.app;
   }
   const where = ['deleted_at IS NULL', appName ? 'app = ?' : '', project ? 'project = ?' : ''].filter(Boolean);
   const sql = `SELECT id, name, content_type, size, app, project, ref, uploaded_by, created_at FROM files WHERE ${where.join(' AND ')} ORDER BY created_at DESC LIMIT 500`;
@@ -317,9 +391,9 @@ app.post('/api/files', async (c) => {
   if (data.byteLength > MAX_UPLOAD) throw new HTTPException(413, { message: 'The file is larger than 100 MB' });
   // Which app and project the file belongs to (x-app, x-project), and an app's own reference (x-ref).
   let appName = scopeOf(c.req.header('x-app'), 'x-app') ?? 'storage';
-  if (who.app) {
-    if (appName !== APP && c.req.header('x-app')) throw new HTTPException(403, { message: 'The app token uploads only its own files' });
-    appName = APP;
+  if (who.app !== null) {
+    if (c.req.header('x-app') && appName !== who.app) throw new HTTPException(403, { message: "This token uploads only its own app's files" });
+    appName = who.app;
   }
   const project = scopeOf(c.req.header('x-project') ?? undefined, 'x-project');
   const ref = (() => {

@@ -50,6 +50,14 @@ Only the superadmin and active members can sign in. Anyone else sees "not invite
 
 The superadmin adds members under Settings → Members, choosing a role. The superadmin account itself is not stored in the database; it comes from the `SUPERADMIN_EMAIL` secret.
 
+### Adding an app
+
+Each app that stores files here is added under Settings → Apps by the superadmin: give it a name and a code (lowercase letters, digits, `-` or `_`). Lumbung shows the app's token once, when it is created, and keeps only its hash. The app sends the token as `Authorization: Bearer <token>`, and its files are filed under its code.
+
+- An app can only list, upload, download and delete its own files.
+- **New token** replaces the token; the old one stops working at once. **Revoke** stops the token, and the files stay.
+- Silpasala is built in: its token is the `APP_TOKEN` secret (`wrangler secret put APP_TOKEN`), and it is shown in Settings but not managed there.
+
 ### Reusing an existing OAuth client
 
 Google only lets an app see Drive files it created itself, so files uploaded through one OAuth client are not visible to another. To keep older files readable, use the same client ID and secret as the app that created them, and add this Worker's redirect URIs to that client.
@@ -75,16 +83,20 @@ All `/api/*` routes need a signed-in person with the role listed.
 | `POST` | `/api/members` | superadmin | Adds or re-enables a member: `{ "email", "role" }` |
 | `PATCH` | `/api/members/:email` | superadmin | Changes `role` (`admin` or `user`) or `status` (`active` or `disabled`) |
 | `DELETE` | `/api/members/:email` | superadmin | Removes a member and signs them out |
-| `GET` | `/api/files` | user | Files, newest first. Filter with `?app=` and `?project=` |
-| `POST` | `/api/files` | user | Upload. The body is the file. See the headers below |
-| `GET` | `/api/files/:id` | user | Download |
-| `DELETE` | `/api/files/:id` | admin | Delete the file here and in Drive |
+| `GET` | `/api/apps` | admin | The apps, their file counts and status (tokens are never shown) |
+| `POST` | `/api/apps` | superadmin | Adds an app: `{ "name", "slug" }`. Returns its token once |
+| `POST` | `/api/apps/:slug/rotate` | superadmin | A new token for the app. Returns it once |
+| `POST` | `/api/apps/:slug/revoke` | superadmin | Stops the app's token |
+| `GET` | `/api/files` | user, or an app token | Files, newest first. Filter with `?app=` and `?project=` |
+| `POST` | `/api/files` | user, or an app token | Upload. The body is the file. See the headers below |
+| `GET` | `/api/files/:id` | user, or an app token | Download |
+| `DELETE` | `/api/files/:id` | admin, or an app token | Move to the trash (removed from Drive after 30 days) |
 
 Upload headers:
 
 - `content-type`: the file's type
 - `x-file-name`: the file name, URL-encoded
-- `x-app`: the app the file belongs to (default `storage`)
+- `x-app`: the app the file belongs to (default `storage`). An app token always uploads as its own app
 - `x-project`: the project within that app (optional)
 - `x-ref`: the app's own reference, such as an issue key (optional)
 

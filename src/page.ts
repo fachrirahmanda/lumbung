@@ -178,6 +178,13 @@ export const PAGE = `<!doctype html>
   .preview-table { overflow: auto; }
   .preview-table td, .preview-table th { white-space: nowrap; font-size: 13px; }
 
+  /* Apps and tokens */
+  .mono { font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace; }
+  .badge.danger { background: color-mix(in srgb, var(--danger) 12%, var(--surface)); color: var(--danger); }
+  .token-reveal { display: grid; gap: 10px; padding: 14px 16px; margin-bottom: 16px; border-radius: 12px; border: 1px solid var(--accent); background: var(--accent-soft); }
+  .token-box { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); }
+  .token-box code { flex: 1; min-width: 0; word-break: break-all; font: 13px/1.4 ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace; }
+  .card table + .form-row { margin-top: 16px; }
   @media (max-width: 1100px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 900px) {
     .two { grid-template-columns: minmax(0, 1fr); }
@@ -209,7 +216,7 @@ export const PAGE = `<!doctype html>
   var app = document.getElementById("app");
   var modalHost = document.getElementById("modal");
   var TABS = ["home", "files", "settings"];
-  var state = { me: null, tab: "home", files: [], drive: null, members: [], error: "", notice: "", nav: false, folder: null, preview: null };
+  var state = { me: null, tab: "home", files: [], drive: null, members: [], apps: [], newToken: null, error: "", notice: "", nav: false, folder: null, preview: null };
   var hashTab = location.hash.slice(1);
   if (TABS.indexOf(hashTab) >= 0) state.tab = hashTab;
   var ERRORS = {
@@ -487,8 +494,38 @@ export const PAGE = `<!doctype html>
       '<div style="overflow-x:auto;"><table><thead><tr><th>Email</th><th>Role</th><th class="hide-sm">Status</th><th class="hide-sm">Invited by</th><th></th></tr></thead><tbody>' + rows + "</tbody></table></div>" + add + "</div>";
   }
 
+  /* Apps: each app that stores files has its own token. Only the superadmin adds apps or changes tokens. */
+  function appsCard() {
+    var superadmin = can("superadmin");
+    var rows = state.apps.map(function (a) {
+      var status = a.builtIn ? '<span class="badge">Built in</span>' : a.revoked ? '<span class="badge danger">Revoked</span>' : '<span class="badge accent">Active</span>';
+      var made = a.builtIn ? "Token set with APP_TOKEN" : esc(a.createdBy || "") + (a.createdAt ? '<div class="meta">' + when(a.createdAt) + "</div>" : "");
+      var actions = "";
+      if (superadmin && !a.builtIn) {
+        actions = '<button class="btn small" data-rotate="' + esc(a.slug) + '">' + (a.revoked ? "Turn on with new token" : "New token") + "</button>" +
+          (a.revoked ? "" : '<button class="btn small danger" data-revoke="' + esc(a.slug) + '">Revoke</button>');
+      }
+      return '<tr><td><div class="name">' + esc(a.name) + '</div><div class="meta mono">' + esc(a.slug) + "</div></td><td>" + status + '</td><td class="num">' + a.files + '</td><td class="hide-sm muted">' + made + '</td><td class="actions">' + actions + "</td></tr>";
+    }).join("");
+    var reveal = "";
+    if (state.newToken) {
+      var base = location.origin;
+      reveal = '<div class="token-reveal"><div><strong>Token for ' + esc(state.newToken.name) + '</strong><div class="muted" style="margin-top:2px;">Copy it now. It is not shown again. Give it only to that app.</div></div>' +
+        '<div class="token-box"><code id="token-value">' + esc(state.newToken.token) + '</code><button type="button" class="btn small" id="token-copy">Copy</button></div>' +
+        '<div class="meta">Send it on every request: <span class="mono">Authorization: Bearer &lt;token&gt;</span>. Files: <span class="mono">' + esc(base) + "/api/files</span>, upload with <span class=\\"mono\\">x-app: " + esc(state.newToken.slug) + "</span> and <span class=\\"mono\\">x-project</span>.</div>" +
+        '<div><button type="button" class="btn small" id="token-close">Done</button></div></div>';
+    }
+    var add = superadmin
+      ? '<form class="form-row" id="add-app"><input type="text" id="app-name" placeholder="App name, e.g. Neraca" maxlength="60" required aria-label="App name" /><input type="text" id="app-slug" placeholder="code, e.g. neraca" maxlength="40" required aria-label="App code" /><button class="btn primary" type="submit">Add app</button></form>' +
+        '<div class="meta" style="margin-top:8px;">The code is what the app sends as x-app and what its files are filed under: lowercase letters, digits, - or _.</div>'
+      : "";
+    return '<div class="card"><div class="card-head"><div><h2>Apps</h2><div class="muted" style="margin-top:4px;">Each app stores its files in its own folder and has its own token. An app can only reach its own files.</div></div></div>' +
+      reveal +
+      '<div style="overflow-x:auto;"><table><thead><tr><th>App</th><th>Status</th><th class="num">Files</th><th class="hide-sm">Added</th><th></th></tr></thead><tbody>' + (rows || '<tr><td colspan="5" class="empty">No apps yet.</td></tr>') + "</tbody></table></div>" + add + "</div>";
+  }
+
   function settingsView() {
-    return '<div class="page-head"><div><h1>Settings</h1><p>Google Drive and who can sign in.</p></div></div>' + driveCard() + membersCard();
+    return '<div class="page-head"><div><h1>Settings</h1><p>Google Drive, apps, and who can sign in.</p></div></div>' + driveCard() + appsCard() + membersCard();
   }
 
   function pageView() {
@@ -566,6 +603,60 @@ export const PAGE = `<!doctype html>
   }
 
   function wireSettings() {
+    var nameInput = document.getElementById("app-name");
+    var slugInput = document.getElementById("app-slug");
+    if (nameInput && slugInput) {
+      // The code follows the name until it is typed by hand.
+      slugInput.oninput = function () { slugInput.dataset.touched = "1"; };
+      nameInput.oninput = function () {
+        if (slugInput.dataset.touched) return;
+        slugInput.value = nameInput.value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+      };
+    }
+    var addApp = document.getElementById("add-app");
+    if (addApp) addApp.onsubmit = function (e) {
+      e.preventDefault();
+      var name = nameInput.value.trim();
+      var slug = slugInput.value.trim().toLowerCase();
+      api("/api/apps", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: name, slug: slug }) })
+        .then(function (res) {
+          state.apps = res.apps;
+          state.newToken = { name: name, slug: slug, token: res.token };
+          notify("App added", false);
+        }).catch(function (err) { notify(err.message, true); });
+    };
+    document.querySelectorAll("[data-rotate]").forEach(function (b) {
+      b.onclick = function () {
+        var slug = b.getAttribute("data-rotate");
+        var a = state.apps.filter(function (x) { return x.slug === slug; })[0];
+        if (!a || !confirm("Make a new token for " + a.name + "? The current token stops working at once.")) return;
+        api("/api/apps/" + encodeURIComponent(slug) + "/rotate", { method: "POST" })
+          .then(function (res) {
+            state.apps = res.apps;
+            state.newToken = { name: a.name, slug: slug, token: res.token };
+            notify("New token made", false);
+          }).catch(function (err) { notify(err.message, true); });
+      };
+    });
+    document.querySelectorAll("[data-revoke]").forEach(function (b) {
+      b.onclick = function () {
+        var slug = b.getAttribute("data-revoke");
+        var a = state.apps.filter(function (x) { return x.slug === slug; })[0];
+        if (!a || !confirm("Revoke " + a.name + "? Its token stops working at once. Its files stay.")) return;
+        api("/api/apps/" + encodeURIComponent(slug) + "/revoke", { method: "POST" })
+          .then(function (res) { state.apps = res.apps; state.newToken = null; notify("App revoked", false); })
+          .catch(function (err) { notify(err.message, true); });
+      };
+    });
+    var copy = document.getElementById("token-copy");
+    if (copy) copy.onclick = function () {
+      var text = document.getElementById("token-value").textContent;
+      try {
+        navigator.clipboard.writeText(text).then(function () { copy.textContent = "Copied"; }, function () { copy.textContent = "Select and copy"; });
+      } catch (e) { copy.textContent = "Select and copy"; }
+    };
+    var close = document.getElementById("token-close");
+    if (close) close.onclick = function () { state.newToken = null; render(); };
     var d = document.getElementById("drive-disconnect");
     if (d) d.onclick = function () {
       if (!confirm("Disconnect Google Drive? Files stay in Drive, but uploads stop until you connect again.")) return;
@@ -741,7 +832,8 @@ export const PAGE = `<!doctype html>
   function loadSettings() {
     return Promise.all([
       can("admin") ? api("/api/drive").then(function (d) { state.drive = d; }) : null,
-      api("/api/members").then(function (m) { state.members = m; })
+      api("/api/members").then(function (m) { state.members = m; }),
+      api("/api/apps").then(function (a) { state.apps = a; })
     ]).then(function () { render(); }).catch(function (e) { notify(e.message, true); });
   }
 
