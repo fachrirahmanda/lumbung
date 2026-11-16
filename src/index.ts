@@ -100,7 +100,7 @@ app.get('/auth/drive', async (c) => {
 
 app.get('/auth/callback', async (c) => {
   const url = new URL(c.req.url);
-  const fail = (reason: string) => c.redirect(`/?error=${encodeURIComponent(reason)}`);
+  const fail = (reason: string, hash = '') => c.redirect(`/?error=${encodeURIComponent(reason)}${hash}`);
   if (url.searchParams.get('error')) return fail('google');
   const raw = getCookie(c, OAUTH_COOKIE);
   deleteCookie(c, OAUTH_COOKIE, { path: '/auth' });
@@ -110,14 +110,14 @@ app.get('/auth/callback', async (c) => {
 
   if (purpose === 'drive') {
     const me = await currentMe(c);
-    if (me?.role !== 'superadmin') return fail('signin');
+    if (me?.role !== 'superadmin') return fail('signin', '#settings');
     try {
       await connectDrive(c.env, code, verifier, redirectUri(c.req.url));
     } catch (err) {
       console.error('drive connect failed', err);
-      return fail('drive');
+      return fail('drive', '#settings');
     }
-    return c.redirect('/');
+    return c.redirect('/?connected=drive#settings');
   }
 
   // Sign-in: exchange the code, then read the account's email from Google.

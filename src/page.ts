@@ -178,6 +178,26 @@ export const PAGE = `<!doctype html>
   .preview-table { overflow: auto; }
   .preview-table td, .preview-table th { white-space: nowrap; font-size: 13px; }
 
+  /* Settings tabs, Google Drive card, status colors */
+  :root { --success: #137438; --warning: #a24b08; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --success: #34d399; --warning: #fbbf24; } }
+  :root[data-theme=dark] { --success: #34d399; --warning: #fbbf24; }
+  main.wide { max-width: none; }
+  .subtabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .subtab { padding: 9px 14px; margin-bottom: -1px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); font: inherit; font-weight: 600; white-space: nowrap; cursor: pointer; }
+  .subtab:hover { color: var(--text); }
+  .subtab[aria-selected=true] { color: var(--text); border-bottom-color: var(--accent); }
+  .drive-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .drive-head .grow { flex: 1 1 240px; min-width: 0; }
+  .drive-logo { display: grid; place-items: center; width: 48px; height: 48px; flex-shrink: 0; border-radius: 12px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
+  .drive-stats { display: flex; flex-wrap: wrap; gap: 28px; margin: 18px 0; }
+  .drive-stats strong { display: block; font-size: 22px; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .drive-stats span { font-size: 12px; color: var(--muted); }
+  .drive-notes { margin: 18px 0; padding-left: 18px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+  .drive-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .badge.ok { background: color-mix(in srgb, var(--success) 12%, var(--surface)); color: var(--success); }
+  .badge.warn { background: color-mix(in srgb, var(--warning) 12%, var(--surface)); color: var(--warning); }
+  .accent-ink { color: var(--accent-ink); font-weight: 600; }
   /* Apps and tokens */
   .mono { font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace; }
   .badge.danger { background: color-mix(in srgb, var(--danger) 12%, var(--surface)); color: var(--danger); }
@@ -216,7 +236,7 @@ export const PAGE = `<!doctype html>
   var app = document.getElementById("app");
   var modalHost = document.getElementById("modal");
   var TABS = ["home", "files", "settings"];
-  var state = { me: null, tab: "home", files: [], drive: null, members: [], apps: [], newToken: null, error: "", notice: "", nav: false, folder: null, preview: null };
+  var state = { me: null, tab: "home", settingsTab: "drive", files: [], drive: null, members: [], apps: [], newToken: null, error: "", notice: "", nav: false, folder: null, preview: null };
   var hashTab = location.hash.slice(1);
   if (TABS.indexOf(hashTab) >= 0) state.tab = hashTab;
   var ERRORS = {
@@ -456,18 +476,35 @@ export const PAGE = `<!doctype html>
     return state.folder ? folderView() : rootView();
   }
 
+  /* Google Drive, laid out like Silpasala's storage card: logo, status, figures, notes, and actions. */
+  var DRIVE_MARK = '<svg width="28" height="28" viewBox="0 0 87.3 78" aria-hidden="true"><path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3L27.5 53H0c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/><path d="M43.65 25 29.9 1.2c-1.35.8-2.5 1.9-3.3 3.3L1.2 48.5A9 9 0 0 0 0 53h27.5z" fill="#00ac47"/><path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5H59.8l5.85 11.5z" fill="#ea4335"/><path d="M43.65 25 57.4 1.2C56.05.4 54.5 0 52.9 0H34.4c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/><path d="M59.8 53H27.5L13.75 76.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc"/><path d="M73.4 26.5 60.7 4.5c-.8-1.4-1.95-2.5-3.3-3.3L43.65 25 59.8 53h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/></svg>';
+
   function driveCard() {
-    var d = state.drive || {};
-    var action = "";
-    var text;
-    if (d.connected) {
-      text = "Connected as " + esc(d.email || "a Google account") + (d.connectedAt ? " since " + new Date(d.connectedAt).toLocaleDateString() : "");
-      if (can("superadmin")) action = '<button class="btn danger" id="drive-disconnect">Disconnect</button>';
-    } else {
-      text = "Not connected. Uploads need Google Drive.";
-      if (can("superadmin")) action = '<a class="btn primary" href="/auth/drive">Connect Google Drive</a>';
+    var d = state.drive;
+    if (!d) return '<div class="card"><div class="empty">Loading Google Drive…</div></div>';
+    var total = state.files.reduce(function (sum, f) { return sum + f.size; }, 0);
+    var status = d.connected ? '<span class="badge ok">Connected</span>' : '<span class="badge warn">Not connected</span>';
+    var line = d.connected
+      ? 'Connected as <span class="accent-ink">' + esc(d.email || "a Google account") + "</span>" + (d.connectedAt ? " · since " + new Date(d.connectedAt).toLocaleDateString() : "")
+      : "Not connected. Uploads are off until a superadmin connects a Drive account.";
+    var stats = d.connected
+      ? '<div class="drive-stats"><div><strong>' + state.files.length + "</strong><span>files in Lumbung</span></div><div><strong>" + bytes(total) + "</strong><span>used in Drive</span></div></div>"
+      : "";
+    var actions = "";
+    if (can("superadmin")) {
+      actions = d.connected
+        ? '<a class="btn primary" href="/auth/drive">Reconnect / switch account</a><button type="button" class="btn danger" id="drive-disconnect">Disconnect</button>'
+        : '<a class="btn primary" href="/auth/drive">Connect Google Drive</a>';
     }
-    return '<div class="card"><div class="row"><div><h2>Google Drive</h2><div class="muted">' + text + "</div></div><div>" + action + "</div></div></div>";
+    var notes = '<ul class="drive-notes">' +
+      "<li>Files are stored in a Drive account that the superadmin connects. Lumbung keeps the file list, and the files are in Drive.</li>" +
+      "<li>Lumbung asks for the <code>drive.file</code> permission only, so it sees the files it created and nothing else in that Drive.</li>" +
+      "<li>Only signed-in members can open files. Deleted files go to the trash for 30 days, then they are removed from Drive.</li>" +
+      "<li>Don't delete files from Drive by hand: Lumbung would lose track of them.</li>" +
+      "</ul>";    var hint = can("superadmin") ? "" : '<div class="meta" style="margin-top:12px;">Only the superadmin can connect or disconnect Drive.</div>';
+    return '<div class="card drive-card">' +
+      '<div class="drive-head"><span class="drive-logo">' + DRIVE_MARK + '</span><div class="grow"><h2>Google Drive</h2><div class="muted">' + line + "</div></div>" + status + "</div>" +
+      stats + notes + (actions ? '<div class="drive-actions">' + actions + "</div>" : "") + hint + "</div>";
   }
 
   function membersCard() {
@@ -525,7 +562,12 @@ export const PAGE = `<!doctype html>
   }
 
   function settingsView() {
-    return '<div class="page-head"><div><h1>Settings</h1><p>Google Drive, apps, and who can sign in.</p></div></div>' + driveCard() + appsCard() + membersCard();
+    var tabs = [["drive", "Google Drive"], ["apps", "Apps"], ["members", "Members"]];
+    var nav = '<div class="subtabs" role="tablist">' + tabs.map(function (t) {
+      return '<button type="button" class="subtab" role="tab" aria-selected="' + (state.settingsTab === t[0]) + '" data-subtab="' + t[0] + '">' + t[1] + "</button>";
+    }).join("") + "</div>";
+    var panel = state.settingsTab === "apps" ? appsCard() : state.settingsTab === "members" ? membersCard() : driveCard();
+    return '<div class="page-head"><div><h1>Settings</h1><p>Google Drive, apps, and who can sign in.</p></div></div>' + nav + panel;
   }
 
   function pageView() {
@@ -539,7 +581,7 @@ export const PAGE = `<!doctype html>
       '<div class="app' + (state.nav ? " nav-open" : "") + '">' + sidebar() +
       '<div class="backdrop" id="backdrop"></div>' +
       '<div class="content"><div class="topbar"><button type="button" class="menu-btn" id="menu" aria-label="Open navigation">' + svg("menu", 18) + '</button><span class="topbar-brand">' + MARK + "<span>Lumbung</span></span></div>" +
-      "<main>" + notices() + pageView() + "</main></div></div>";
+      '<main class="' + (state.tab === "settings" ? "wide" : "") + '">' + notices() + pageView() + "</main></div></div>";
     wireApp();
   }
 
@@ -603,6 +645,9 @@ export const PAGE = `<!doctype html>
   }
 
   function wireSettings() {
+    document.querySelectorAll("[data-subtab]").forEach(function (b) {
+      b.onclick = function () { state.settingsTab = b.getAttribute("data-subtab"); render(); };
+    });
     var nameInput = document.getElementById("app-name");
     var slugInput = document.getElementById("app-slug");
     if (nameInput && slugInput) {
@@ -840,6 +885,7 @@ export const PAGE = `<!doctype html>
   function start() {
     var params = new URLSearchParams(location.search);
     if (params.get("error")) state.error = ERRORS[params.get("error")] || "Something went wrong.";
+    if (params.get("connected") === "drive") state.notice = "Google Drive connected";
     api("/api/me").then(function (me) {
       state.me = me;
       if (!can("admin") && state.tab === "settings") state.tab = "home";
